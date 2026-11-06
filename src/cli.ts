@@ -1,13 +1,10 @@
 import { Command } from "commander";
-import { createRequire } from "node:module";
 import pc from "picocolors";
 import { initCommand } from "./commands/init.js";
 import { installCommand } from "./commands/install.js";
 import { removeCommand } from "./commands/remove.js";
 import { listCommand } from "./commands/list.js";
-
-const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { version: string };
+import { getBanner, getVersion } from "./lib/banner.js";
 
 const program = new Command();
 
@@ -16,7 +13,8 @@ let debugMode = false;
 program
   .name("skillpm")
   .description("A package manager for AI agent skills")
-  .version(pkg.version)
+  .version(getVersion())
+  .addHelpText("before", `${getBanner()}\n`)
   .option("--debug", "show full stack traces on error")
   .option("--dir <path>", "change the skills install directory (default: .skills)")
   .hook("preAction", (_thisCommand) => {

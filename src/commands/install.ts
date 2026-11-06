@@ -12,6 +12,7 @@ import { getSkillsDir } from "../lib/config.js";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { moveDir } from "../lib/fs.js";
+import { getBanner } from "../lib/banner.js";
 
 export async function installCommand(source?: string): Promise<void> {
   if (source) {
@@ -81,6 +82,7 @@ async function installSingle(
   });
   await writeLockfile(lockfile);
 
+  console.log(`${getBanner()}`);
   console.log(`${pc.green("✓")} Installed ${pc.bold(name)} ${pc.dim(`(${shortSha})`)}`);
 }
 
