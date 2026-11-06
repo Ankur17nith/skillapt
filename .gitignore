@@ -1,0 +1,6 @@
+node_modules
+dist
+.skills
+*.tgz
+.env
+*.log
