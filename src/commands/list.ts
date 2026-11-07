@@ -5,59 +5,74 @@ import { readManifest } from "../lib/manifest.js";
 import { readLockfile } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
 
-export async function listCommand(): Promise<void> {
+export interface ListOptions {
+  json?: boolean;
+}
+
+export async function listCommand(options: ListOptions = {}): Promise<void> {
   const skillsDir = getSkillsDir();
   const manifest = await readManifest();
   const lockfile = await readLockfile();
   const names = Object.keys(manifest.skills);
 
   if (names.length === 0) {
-    console.log(pc.yellow("No skills installed."));
+    if (options.json) {
+      console.log(JSON.stringify([], null, 2));
+    } else {
+      console.log(pc.yellow("No skills installed."));
+    }
     return;
   }
 
   // Build table data
   const rows: Array<{
     name: string;
+    version: string;
     source: string;
-    sha: string;
     description: string;
   }> = [];
 
   for (const name of names) {
     const entry = manifest.skills[name]!;
     const lockEntry = lockfile.skills[name];
-    const sha = lockEntry?.sha ? lockEntry.sha.slice(0, 7) : "—";
+    const versionOrSha =
+      lockEntry?.version ??
+      (lockEntry?.sha ? lockEntry.sha.slice(0, 7) : "—");
     const description = await getDescription(name, skillsDir);
 
     rows.push({
       name,
+      version: versionOrSha,
       source: entry.source,
-      sha,
       description,
     });
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(rows, null, 2));
+    return;
   }
 
   // Print as a simple table
   const colWidths = {
     name: Math.max(4, ...rows.map((r) => r.name.length)),
+    version: Math.max(7, ...rows.map((r) => r.version.length)),
     source: Math.max(6, ...rows.map((r) => r.source.length)),
-    sha: 7,
     description: Math.max(11, ...rows.map((r) => r.description.length)),
   };
 
   const header = [
     pc.bold("Name".padEnd(colWidths.name)),
+    pc.bold("Version".padEnd(colWidths.version)),
     pc.bold("Source".padEnd(colWidths.source)),
-    pc.bold("SHA".padEnd(colWidths.sha)),
     pc.bold("Description"),
   ].join("  ");
 
   const separator = pc.dim(
     [
       "─".repeat(colWidths.name),
+      "─".repeat(colWidths.version),
       "─".repeat(colWidths.source),
-      "─".repeat(colWidths.sha),
       "─".repeat(Math.min(colWidths.description, 50)),
     ].join("  ")
   );
@@ -69,8 +84,8 @@ export async function listCommand(): Promise<void> {
     console.log(
       [
         pc.green(row.name.padEnd(colWidths.name)),
+        pc.cyan(row.version.padEnd(colWidths.version)),
         row.source.padEnd(colWidths.source),
-        pc.dim(row.sha.padEnd(colWidths.sha)),
         pc.dim(row.description.slice(0, 60)),
       ].join("  ")
     );

@@ -3,15 +3,20 @@ import pc from "picocolors";
 import { initCommand } from "./commands/init.js";
 import { installCommand } from "./commands/install.js";
 import { removeCommand } from "./commands/remove.js";
-import { listCommand } from "./commands/list.js";
+import { listCommand, type ListOptions } from "./commands/list.js";
+import { searchCommand, type SearchOptions } from "./commands/search.js";
+import { infoCommand, type InfoOptions } from "./commands/info.js";
+import { outdatedCommand, type OutdatedOptions } from "./commands/outdated.js";
+import { updateCommand, type UpdateOptions } from "./commands/update.js";
 import { getBanner, getVersion } from "./lib/banner.js";
+import { PRODUCT_NAME } from "./lib/config.js";
 
 const program = new Command();
 
 let debugMode = false;
 
 program
-  .name("skillpm")
+  .name(PRODUCT_NAME)
   .description("A package manager for AI agent skills")
   .version(getVersion())
   .addHelpText("before", `${getBanner()}\n`)
@@ -21,6 +26,7 @@ program
     const opts = program.opts<{ debug?: boolean; dir?: string }>();
     debugMode = !!opts.debug;
     if (opts.dir) {
+      process.env.SKILLAPT_DIR = opts.dir;
       process.env.SKILLPM_DIR = opts.dir;
     }
   });
@@ -48,7 +54,55 @@ program
 program
   .command("list")
   .description("Show installed skills")
-  .action(wrap(listCommand));
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (opts: ListOptions) => {
+      await listCommand(opts);
+    })
+  );
+
+program
+  .command("search <query>")
+  .description("Search for skills in the registry")
+  .option("--json", "output in JSON format")
+  .option("--category <cat>", "filter by category")
+  .option("--compat <runtime>", "filter by compatibility runtime")
+  .option("--limit <count>", "number of items to return (default: 20)")
+  .action(
+    wrap(async (query: string, opts: SearchOptions) => {
+      await searchCommand(query, opts);
+    })
+  );
+
+program
+  .command("info <name>")
+  .description("Show detailed information about a registry skill")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (name: string, opts: InfoOptions) => {
+      await infoCommand(name, opts);
+    })
+  );
+
+program
+  .command("outdated")
+  .description("Check for newer versions of installed skills")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (opts: OutdatedOptions) => {
+      await outdatedCommand(opts);
+    })
+  );
+
+program
+  .command("update [name]")
+  .description("Update installed skills to their latest compatible versions")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (name?: string, opts?: UpdateOptions) => {
+      await updateCommand(name, opts);
+    })
+  );
 
 program.parse();
 

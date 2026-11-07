@@ -133,11 +133,15 @@ describe.skipIf(SKIP)("e2e", () => {
 
   it("--help works", () => {
     const out = run(["--help"], dir);
-    expect(out).toContain("skillpm");
+    expect(out).toContain("skillapt");
     expect(out).toContain("install");
     expect(out).toContain("remove");
     expect(out).toContain("list");
     expect(out).toContain("init");
+    expect(out).toContain("search");
+    expect(out).toContain("info");
+    expect(out).toContain("outdated");
+    expect(out).toContain("update");
   });
 
   it("--dir option changes skills directory", () => {
