@@ -8,6 +8,8 @@ import { searchCommand, type SearchOptions } from "./commands/search.js";
 import { infoCommand, type InfoOptions } from "./commands/info.js";
 import { outdatedCommand, type OutdatedOptions } from "./commands/outdated.js";
 import { updateCommand, type UpdateOptions } from "./commands/update.js";
+import { loginCommand, type LoginOptions } from "./commands/login.js";
+import { logoutCommand } from "./commands/logout.js";
 import { getBanner, getVersion } from "./lib/banner.js";
 import { PRODUCT_NAME } from "./lib/config.js";
 
@@ -103,6 +105,21 @@ program
       await updateCommand(name, opts);
     })
   );
+
+program
+  .command("login")
+  .description("Authenticate with the skillapt registry via GitHub")
+  .option("--token <token>", "provide API token directly")
+  .action(
+    wrap(async (opts: LoginOptions) => {
+      await loginCommand(opts);
+    })
+  );
+
+program
+  .command("logout")
+  .description("Remove stored credentials")
+  .action(wrap(logoutCommand));
 
 program.parse();
 

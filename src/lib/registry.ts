@@ -1,5 +1,6 @@
 import { getRegistryUrl, PRODUCT_NAME } from "./config.js";
 import { getVersion } from "./banner.js";
+import { getAuthToken } from "./auth.js";
 
 // ── Types from openapi.yaml & SPEC.md ──
 
@@ -443,7 +444,7 @@ export class RegistryClient {
     options: RequestInit & { token?: string } = {}
   ): Promise<Response> {
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-    const token = options.token ?? this.token;
+    const token = options.token ?? this.token ?? (await getAuthToken()) ?? undefined;
 
     const headers = new Headers(options.headers);
     headers.set("User-Agent", `${PRODUCT_NAME}/${getVersion()}`);
