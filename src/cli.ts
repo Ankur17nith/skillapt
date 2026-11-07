@@ -13,6 +13,7 @@ import { logoutCommand } from "./commands/logout.js";
 import { packCommand, type PackCommandOptions } from "./commands/pack.js";
 import { publishCommand, type PublishCommandOptions } from "./commands/publish.js";
 import { yankCommand, type YankCommandOptions } from "./commands/yank.js";
+import { doctorCommand, type DoctorOptions } from "./commands/doctor.js";
 import { getBanner, getVersion } from "./lib/banner.js";
 import { PRODUCT_NAME } from "./lib/config.js";
 
@@ -171,6 +172,19 @@ program
   .action(
     wrap(async (spec: string, versionOrOpts?: string | YankCommandOptions, maybeOpts?: YankCommandOptions) => {
       await yankCommand(spec, versionOrOpts, maybeOpts);
+    })
+  );
+
+program
+  .command("doctor")
+  .description("Check Node.js version, registry reachability, authentication and environment")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (opts: DoctorOptions) => {
+      const ok = await doctorCommand(opts);
+      if (!ok) {
+        process.exit(1);
+      }
     })
   );
 

@@ -157,6 +157,13 @@ export interface StatsResponse {
   totalAuthors: number;
 }
 
+export interface HealthStatus {
+  status: string;
+  product: string;
+  version: string;
+  timestamp: string;
+}
+
 // ── Registry Error Classes ──
 
 export class RegistryError extends Error {
@@ -423,6 +430,24 @@ export class RegistryClient {
    */
   async getStats(): Promise<StatsResponse> {
     return this.request<StatsResponse>("/stats", { method: "GET" });
+  }
+
+  /**
+   * Health status of registry service.
+   */
+  async getHealth(): Promise<HealthStatus> {
+    try {
+      return await this.request<HealthStatus>("/health", { method: "GET" });
+    } catch {
+      // Fallback: if /health is not implemented on server, test reachability via /stats
+      await this.getStats();
+      return {
+        status: "ok",
+        product: PRODUCT_NAME,
+        version: getVersion(),
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   // ── Private HTTP Helpers ──
