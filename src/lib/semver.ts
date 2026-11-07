@@ -27,12 +27,23 @@ export function resolveSkillVersion(
   if (exactVersion) {
     const exactMatch = versions[exactVersion];
     if (exactMatch) {
+      if (exactMatch.removed || exactMatch.status === "removed") {
+        throw new Error(
+          `Version "${exactVersion}" of "${skill.name}" has been permanently removed by registry administrators and cannot be installed.`
+        );
+      }
       return exactMatch;
     }
   }
 
-  // Filter out yanked versions for range resolution
-  const nonYankedVersions = versionKeys.filter((v) => !versions[v]?.yanked);
+  // Filter out yanked and removed versions for range resolution
+  const nonYankedVersions = versionKeys.filter((v) => {
+    const ver = versions[v];
+    if (!ver) return false;
+    if (ver.removed || ver.status === "removed") return false;
+    if (ver.yanked || ver.status === "yanked") return false;
+    return true;
+  });
 
   if (nonYankedVersions.length === 0) {
     throw new Error(

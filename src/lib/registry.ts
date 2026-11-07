@@ -63,12 +63,16 @@ export interface SkillSummary {
 
 export interface SkillVersionSummary {
   version: string;
+  integrity?: string;
   sha256: string;
   size: number;
   tarballUrl: string;
   dependencies: Record<string, string>;
   publishedAt: string;
+  status?: "active" | "yanked" | "removed";
   yanked: boolean;
+  removed?: boolean;
+  removalReason?: string | null;
   permissions: Permissions;
 }
 
@@ -95,12 +99,16 @@ export interface SkillDetail {
 export interface SkillVersionDetail {
   name: string;
   version: string;
+  integrity?: string;
   sha256: string;
   size: number;
   tarballUrl: string;
   dependencies: Record<string, string>;
   publishedAt: string;
+  status?: "active" | "yanked" | "removed";
   yanked: boolean;
+  removed?: boolean;
+  removalReason?: string | null;
   permissions: Permissions;
 }
 
@@ -202,6 +210,13 @@ export class ConflictError extends RegistryError {
   constructor(message: string = "Version already exists and is immutable.") {
     super(message, 409, "CONFLICT");
     this.name = "ConflictError";
+  }
+}
+
+export class GoneError extends RegistryError {
+  constructor(message: string = "Package version has been permanently removed.") {
+    super(message, 410, "GONE");
+    this.name = "GoneError";
   }
 }
 
@@ -307,7 +322,7 @@ export class RegistryClient {
    * Publish a .tar.gz archive.
    */
   async publishSkill(tarballBuffer: Uint8Array, token?: string): Promise<PublishResponse> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to publish skills. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -327,7 +342,7 @@ export class RegistryClient {
    * Yank a skill version from discovery and resolution.
    */
   async yankSkill(name: string, version: string, reason?: string, token?: string): Promise<YankResponse> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to yank skills. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -345,7 +360,7 @@ export class RegistryClient {
    * Get current authenticated user.
    */
   async getMe(token?: string): Promise<User> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -360,7 +375,7 @@ export class RegistryClient {
    * Create a new API token.
    */
   async createToken(name: string, token?: string): Promise<CreateTokenResponse> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to create tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -377,7 +392,7 @@ export class RegistryClient {
    * List API tokens.
    */
   async listTokens(token?: string): Promise<{ tokens: TokenSummary[] }> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to list tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -392,7 +407,7 @@ export class RegistryClient {
    * Revoke an API token by ID.
    */
   async revokeToken(id: string, token?: string): Promise<{ message: string }> {
-    const authToken = token ?? this.token;
+    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to revoke tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -555,6 +570,10 @@ export class RegistryClient {
 
     if (res.status === 409) {
       throw new ConflictError(errorMessage);
+    }
+
+    if (res.status === 410) {
+      throw new GoneError(errorMessage);
     }
 
     throw new RegistryError(errorMessage, res.status, errorCode);

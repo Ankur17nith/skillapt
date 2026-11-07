@@ -6,9 +6,12 @@ export interface LockEntry {
   source: string;
   version?: string;
   resolved?: string;
+  integrity?: string;
   sha256?: string;
   sha?: string; // GitHub commit SHA for github sources
   subpath?: string | null;
+  category?: string;
+  permissions?: unknown;
   dependencies?: Record<string, string>;
 }
 
@@ -64,12 +67,17 @@ export function addLockEntry(
   name: string,
   entry: LockEntry
 ): Lockfile {
+  const normalizedEntry: LockEntry = {
+    ...entry,
+    integrity: entry.integrity ?? (entry.sha256 ? `sha256-${entry.sha256}` : undefined),
+    sha256: entry.sha256 ?? (entry.integrity?.startsWith("sha256-") ? entry.integrity.slice(7) : undefined),
+  };
   return {
     ...lockfile,
     lockfileVersion: 2,
     skills: {
       ...lockfile.skills,
-      [name]: entry,
+      [name]: normalizedEntry,
     },
   };
 }

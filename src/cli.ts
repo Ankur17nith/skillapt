@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import pc from "picocolors";
-import { initCommand } from "./commands/init.js";
+import { initCommand, type InitOptions } from "./commands/init.js";
 import { installCommand } from "./commands/install.js";
 import { removeCommand } from "./commands/remove.js";
 import { listCommand, type ListOptions } from "./commands/list.js";
@@ -10,6 +10,9 @@ import { outdatedCommand, type OutdatedOptions } from "./commands/outdated.js";
 import { updateCommand, type UpdateOptions } from "./commands/update.js";
 import { loginCommand, type LoginOptions } from "./commands/login.js";
 import { logoutCommand } from "./commands/logout.js";
+import { packCommand, type PackCommandOptions } from "./commands/pack.js";
+import { publishCommand, type PublishCommandOptions } from "./commands/publish.js";
+import { yankCommand, type YankCommandOptions } from "./commands/yank.js";
 import { getBanner, getVersion } from "./lib/banner.js";
 import { PRODUCT_NAME } from "./lib/config.js";
 
@@ -35,8 +38,19 @@ program
 
 program
   .command("init")
-  .description("Create a skills.json in the current folder")
-  .action(wrap(initCommand));
+  .description("Scaffold skill package (SKILL.md, skill.json) or consumer skills.json")
+  .option("--name <name>", "package name for the skill")
+  .option("--skill", "scaffold skill.json and SKILL.md only")
+  .option("--workspace", "scaffold skills.json only")
+  .action(
+    wrap(async (opts: { name?: string; skill?: boolean; workspace?: boolean }) => {
+      await initCommand({
+        name: opts.name,
+        skillOnly: opts.skill,
+        workspaceOnly: opts.workspace,
+      });
+    })
+  );
 
 program
   .command("install [source]")
@@ -120,6 +134,43 @@ program
   .command("logout")
   .description("Remove stored credentials")
   .action(wrap(logoutCommand));
+
+program
+  .command("pack [dir]")
+  .description("Validate skill files and create a .tar.gz archive")
+  .option("--out <path>", "output directory for the .tar.gz file")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (dir?: string, opts?: PackCommandOptions) => {
+      await packCommand(dir, opts);
+    })
+  );
+
+program
+  .command("publish [target]")
+  .description("Publish a skill package or tarball to the registry")
+  .option("--registry <url>", "override registry URL")
+  .option("--token <token>", "authentication token")
+  .option("--keep-tarball", "keep generated tarball after publishing")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (target?: string, opts?: PublishCommandOptions) => {
+      await publishCommand(target, opts);
+    })
+  );
+
+program
+  .command("yank <spec> [version]")
+  .description("Yank a published skill version from search and range resolution (e.g. name@1.0.0)")
+  .option("--reason <reason>", "reason for yanking this version")
+  .option("--registry <url>", "override registry URL")
+  .option("--token <token>", "authentication token")
+  .option("--json", "output in JSON format")
+  .action(
+    wrap(async (spec: string, versionOrOpts?: string | YankCommandOptions, maybeOpts?: YankCommandOptions) => {
+      await yankCommand(spec, versionOrOpts, maybeOpts);
+    })
+  );
 
 program.parse();
 
