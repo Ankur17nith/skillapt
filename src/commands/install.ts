@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { moveDir } from "../lib/fs.js";
 import { getBanner } from "../lib/banner.js";
 import { RegistryClient } from "../lib/registry.js";
-import { resolveSkillVersion } from "../lib/semver.js";
+import { DependencyResolver } from "../lib/dependencies.js";
 
 export async function installCommand(source?: string): Promise<void> {
   if (source) {
@@ -106,46 +106,52 @@ async function installRegistry(
 ): Promise<void> {
   const skillsDir = getSkillsDir();
   const client = new RegistryClient();
+  const resolver = new DependencyResolver(client);
 
   const rangeOrVersion = options?.forceVersion ?? parsed.range;
   const rangeLabel = rangeOrVersion ? `@${rangeOrVersion}` : "";
 
-  console.log(pc.dim(`Resolving ${parsed.name}${rangeLabel} from registry...`));
-  const detail = await client.getSkill(parsed.name);
-  const resolved = resolveSkillVersion(detail, rangeOrVersion);
+  console.log(pc.dim(`Resolving dependencies for ${parsed.name}${rangeLabel}...`));
+  const { packages, installOrder, treeString } = await resolver.resolve(parsed.name, rangeOrVersion);
 
-  console.log(pc.dim(`Downloading ${parsed.name}@${resolved.version}...`));
-  const { stream } = await client.downloadTarball(parsed.name, resolved.version);
+  let lockfile = await readLockfile();
 
-  console.log(pc.dim(`Verifying sha256 & extracting...`));
-  await extractSkill({
-    tarballStream: stream,
-    name: parsed.name,
-    skillsDir,
-    expectedSha256: resolved.sha256,
-  });
+  // Install in deterministic topological order (dependencies first)
+  for (const pkg of installOrder) {
+    console.log(pc.dim(`Downloading ${pkg.name}@${pkg.version}...`));
+    const { stream } = await client.downloadTarball(pkg.name, pkg.version);
 
-  // Update skills.json
+    console.log(pc.dim(`Verifying & extracting ${pkg.name}...`));
+    await extractSkill({
+      tarballStream: stream,
+      name: pkg.name,
+      skillsDir,
+      expectedSha256: pkg.sha256,
+    });
+
+    lockfile = addLockEntry(lockfile, pkg.name, {
+      source: "registry",
+      version: pkg.version,
+      resolved: pkg.tarballUrl,
+      sha256: pkg.sha256,
+      dependencies: pkg.dependencies,
+    });
+  }
+
+  await writeLockfile(lockfile);
+
+  // Update skills.json with the root package
+  const rootPkg = packages.get(parsed.name)!;
   let manifest = await readManifest();
   manifest = addSkill(manifest, parsed.name, {
     source: parsed.name,
-    version: parsed.range ?? `^${resolved.version}`,
+    version: parsed.range ?? `^${rootPkg.version}`,
   });
   await writeManifest(manifest);
 
-  // Update lockfile
-  let lockfile = await readLockfile();
-  lockfile = addLockEntry(lockfile, parsed.name, {
-    source: "registry",
-    version: resolved.version,
-    resolved: resolved.tarballUrl,
-    sha256: resolved.sha256,
-    dependencies: resolved.dependencies ?? {},
-  });
-  await writeLockfile(lockfile);
-
   console.log(`${getBanner()}`);
-  console.log(`${pc.green("✓")} Installed ${pc.bold(parsed.name)} ${pc.dim(`(v${resolved.version})`)}`);
+  console.log(`${pc.green("✓")} Installed skills:`);
+  console.log(treeString);
 }
 
 async function installAll(): Promise<void> {
