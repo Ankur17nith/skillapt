@@ -2,6 +2,7 @@ import pc from "picocolors";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PRODUCT_NAME } from "./config.js";
 
 /**
  * Discover the package.json version dynamically by traversing up.
@@ -16,7 +17,7 @@ export function getVersion(): string {
           name?: string;
           version?: string;
         };
-        if (pkg.name === "skillpm" && pkg.version) {
+        if ((pkg.name === PRODUCT_NAME || pkg.name === "skillpm" || pkg.name === "skillapt") && pkg.version) {
           return pkg.version;
         }
       } catch {
@@ -29,8 +30,8 @@ export function getVersion(): string {
 }
 
 /**
- * Returns a small CLI banner: "skillpm" in bold, version in muted color.
+ * Returns a small CLI banner: product name in bold, version in muted color.
  */
 export function getBanner(): string {
-  return `${pc.bold("skillpm")} ${pc.dim(`v${getVersion()}`)}`;
+  return `${pc.bold(PRODUCT_NAME)} ${pc.dim(`v${getVersion()}`)}`;
 }

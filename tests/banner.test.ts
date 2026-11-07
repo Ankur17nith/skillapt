@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getBanner, getVersion } from "../src/lib/banner.js";
+import { PRODUCT_NAME } from "../src/lib/config.js";
 
 describe("banner", () => {
   it("returns package version", () => {
@@ -7,9 +8,9 @@ describe("banner", () => {
     expect(version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it("contains skillpm and version in banner", () => {
+  it("contains product name and version in banner", () => {
     const banner = getBanner();
-    expect(banner).toContain("skillpm");
+    expect(banner).toContain(PRODUCT_NAME);
     expect(banner).toContain(`v${getVersion()}`);
   });
 });
