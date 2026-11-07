@@ -1,9 +1,10 @@
 {
-  "name": "skillpm",
-  "version": "0.0.1",
-  "description": "A package manager for AI agent skills",
+  "name": "skillapt",
+  "version": "0.1.0",
+  "description": "Package manager and CLI for AI agent skills",
   "type": "module",
   "bin": {
+    "skillapt": "dist/cli.js",
     "skillpm": "dist/cli.js"
   },
   "engines": {
@@ -16,18 +17,29 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
+    "skillapt",
     "ai",
     "agent",
     "skills",
+    "claude",
+    "cursor",
+    "codex",
     "package-manager",
     "cli"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/skillpm/skillpm.git"
+    "url": "https://github.com/Ankur17nith/skillapt.git"
+  },
+  "homepage": "https://github.com/Ankur17nith/skillapt#readme",
+  "bugs": {
+    "url": "https://github.com/Ankur17nith/skillapt/issues"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "install.sh"
   ],
   "license": "MIT",
   "dependencies": {
