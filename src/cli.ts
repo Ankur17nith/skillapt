@@ -32,8 +32,13 @@ program
 
 program
   .command("install [source]")
-  .description("Install a skill from GitHub, or install all from skills.json")
-  .action(wrap(installCommand));
+  .description("Install a skill from the registry or GitHub, or install all from skills.json")
+  .option("--frozen", "fail if skills.lock.json is missing or out of sync (for CI)")
+  .action(
+    wrap(async (source?: string, opts?: { frozen?: boolean }) => {
+      await installCommand(source, opts);
+    })
+  );
 
 program
   .command("remove <name>")

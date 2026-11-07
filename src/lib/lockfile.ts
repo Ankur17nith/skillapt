@@ -1,17 +1,19 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Manifest } from "./manifest.js";
 
 export interface LockEntry {
   source: string;
-  sha?: string;
   version?: string;
   resolved?: string;
   sha256?: string;
+  sha?: string; // GitHub commit SHA for github sources
   subpath?: string | null;
   dependencies?: Record<string, string>;
 }
 
 export interface Lockfile {
+  lockfileVersion: number;
   skills: Record<string, LockEntry>;
 }
 
@@ -22,28 +24,38 @@ export function lockfilePath(dir: string = "."): string {
   return join(dir, LOCKFILE_NAME);
 }
 
-/** Read skills.lock.json. Returns an empty lockfile if the file doesn't exist. */
+/** Read skills.lock.json. Returns an empty v2 lockfile if the file doesn't exist. */
 export async function readLockfile(dir: string = "."): Promise<Lockfile> {
   const filePath = lockfilePath(dir);
   try {
     const raw = await readFile(filePath, "utf-8");
-    const json = JSON.parse(raw) as Lockfile;
-    return { skills: json.skills ?? {} };
+    const json = JSON.parse(raw) as Partial<Lockfile>;
+    return {
+      lockfileVersion: json.lockfileVersion ?? 2,
+      skills: json.skills ?? {},
+    };
   } catch (err: unknown) {
     if (isNodeError(err) && err.code === "ENOENT") {
-      return { skills: {} };
+      return {
+        lockfileVersion: 2,
+        skills: {},
+      };
     }
     throw err;
   }
 }
 
-/** Write the lockfile to disk. */
+/** Write the lockfile to disk with lockfileVersion: 2. */
 export async function writeLockfile(
   lockfile: Lockfile,
   dir: string = "."
 ): Promise<void> {
   const filePath = lockfilePath(dir);
-  await writeFile(filePath, JSON.stringify(lockfile, null, 2) + "\n", "utf-8");
+  const v2Lockfile: Lockfile = {
+    lockfileVersion: 2,
+    skills: lockfile.skills,
+  };
+  await writeFile(filePath, JSON.stringify(v2Lockfile, null, 2) + "\n", "utf-8");
 }
 
 /** Add or update a skill in the lockfile (does not write to disk). */
@@ -54,6 +66,7 @@ export function addLockEntry(
 ): Lockfile {
   return {
     ...lockfile,
+    lockfileVersion: 2,
     skills: {
       ...lockfile.skills,
       [name]: entry,
@@ -67,7 +80,33 @@ export function removeLockEntry(
   name: string
 ): Lockfile {
   const { [name]: _, ...rest } = lockfile.skills;
-  return { ...lockfile, skills: rest };
+  return {
+    ...lockfile,
+    lockfileVersion: 2,
+    skills: rest,
+  };
+}
+
+/**
+ * Check if a lockfile is in sync with skills.json manifest.
+ */
+export function checkLockfileSync(
+  manifest: Manifest,
+  lockfile: Lockfile
+): { inSync: boolean; missing: string[] } {
+  const missing: string[] = [];
+  const manifestNames = Object.keys(manifest.skills);
+
+  for (const name of manifestNames) {
+    if (!lockfile.skills[name]) {
+      missing.push(name);
+    }
+  }
+
+  return {
+    inSync: missing.length === 0,
+    missing,
+  };
 }
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {

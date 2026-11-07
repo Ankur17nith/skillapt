@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { existsSync } from "node:fs";
 import { parseSource, type SkillSource, type GitHubSource, type RegistrySource } from "../lib/source.js";
 import { resolveRef, downloadTarball } from "../lib/github.js";
 import { extractSkill } from "../lib/extract.js";
@@ -7,6 +8,9 @@ import {
   readLockfile,
   writeLockfile,
   addLockEntry,
+  lockfilePath,
+  checkLockfileSync,
+  type LockEntry,
 } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
 import { readFile, rm } from "node:fs/promises";
@@ -16,11 +20,22 @@ import { getBanner } from "../lib/banner.js";
 import { RegistryClient } from "../lib/registry.js";
 import { DependencyResolver } from "../lib/dependencies.js";
 
-export async function installCommand(source?: string): Promise<void> {
+export interface InstallOptions {
+  frozen?: boolean;
+}
+
+export async function installCommand(
+  source?: string,
+  options: InstallOptions = {}
+): Promise<void> {
+  if (options.frozen && source) {
+    throw new Error("Cannot specify a package source when running with --frozen.");
+  }
+
   if (source) {
     await installSingle(source);
   } else {
-    await installAll();
+    await installAll(options);
   }
 }
 
@@ -121,7 +136,7 @@ async function installRegistry(
     console.log(pc.dim(`Downloading ${pkg.name}@${pkg.version}...`));
     const { stream } = await client.downloadTarball(pkg.name, pkg.version);
 
-    console.log(pc.dim(`Verifying & extracting ${pkg.name}...`));
+    console.log(pc.dim(`Verifying sha256 & extracting ${pkg.name}...`));
     await extractSkill({
       tarballStream: stream,
       name: pkg.name,
@@ -154,47 +169,106 @@ async function installRegistry(
   console.log(treeString);
 }
 
-async function installAll(): Promise<void> {
+/**
+ * Install all skills from manifest and lockfile.
+ * In locked install, registry packages NEVER call the resolve endpoint and fail on any hash mismatch.
+ */
+async function installAll(options: InstallOptions = {}): Promise<void> {
+  const lockExists = existsSync(lockfilePath());
+
+  if (options.frozen && !lockExists) {
+    throw new Error(
+      "Lockfile skills.lock.json not found. Run 'skillapt install' to generate a lockfile before using --frozen."
+    );
+  }
+
   const manifest = await readManifest();
   const lockfile = await readLockfile();
-  const skills = Object.entries(manifest.skills);
+  const skillsDir = getSkillsDir();
 
-  if (skills.length === 0) {
+  // If frozen, enforce complete lockfile sync
+  if (options.frozen) {
+    const sync = checkLockfileSync(manifest, lockfile);
+    if (!sync.inSync) {
+      throw new Error(
+        `skills.lock.json is out of sync with skills.json. Missing: ${sync.missing.join(", ")}. Aborting frozen install.`
+      );
+    }
+  }
+
+  const lockedSkills = Object.entries(lockfile.skills);
+
+  // If lockfile has skills, install strictly from lockfile (never calling resolve endpoint)
+  if (lockedSkills.length > 0) {
+    console.log(
+      `Installing ${pc.bold(String(lockedSkills.length))} skill(s) from ${pc.cyan("skills.lock.json")}${options.frozen ? " (frozen)" : ""}...\n`
+    );
+
+    const client = new RegistryClient();
+
+    for (const [name, entry] of lockedSkills) {
+      if (entry.source === "registry" || (!entry.source.includes("/") && entry.version)) {
+        // Registry skill from lockfile: DO NOT call resolve endpoint!
+        if (!entry.version) {
+          throw new Error(`Lockfile entry for "${name}" is missing version.`);
+        }
+        if (!entry.sha256) {
+          throw new Error(`Lockfile entry for "${name}" is missing sha256 checksum.`);
+        }
+
+        console.log(`→ ${pc.bold(name)} ${pc.dim(`(v${entry.version})`)} [locked]`);
+        const { stream } = await client.downloadTarball(name, entry.version);
+
+        await extractSkill({
+          tarballStream: stream,
+          name,
+          skillsDir,
+          expectedSha256: entry.sha256,
+        });
+      } else {
+        // GitHub skill from lockfile
+        const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
+        console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr})`)} [locked]`);
+
+        const tarball = await downloadTarball(
+          entry.source.split("/")[0],
+          entry.source.split("/")[1],
+          entry.sha!
+        );
+
+        await extractSkill({
+          tarballStream: tarball,
+          name,
+          skillsDir,
+          subpath: entry.subpath,
+        });
+      }
+    }
+
+    console.log(`\n${pc.green("✓")} All skills installed successfully from lockfile.`);
+    return;
+  }
+
+  // Fallback if lockfile is empty: install from skills.json and generate lockfile
+  const manifestSkills = Object.entries(manifest.skills);
+  if (manifestSkills.length === 0) {
     console.log(pc.yellow("No skills listed in skills.json. Nothing to install."));
     return;
   }
 
-  console.log(`Installing ${pc.bold(String(skills.length))} skill(s)...\n`);
+  console.log(`Installing ${pc.bold(String(manifestSkills.length))} skill(s) from skills.json...\n`);
 
-  for (const [name, entry] of skills) {
+  for (const [name, entry] of manifestSkills) {
     const isGitHub = entry.source.includes("/") && !entry.source.startsWith("@");
     if (isGitHub) {
-      const sourceStr = entry.subpath
-        ? `${entry.source}/${entry.subpath}`
-        : entry.source;
+      const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
       const refStr = entry.ref ? `@${entry.ref}` : "";
       console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr}${refStr})`)}`);
-
-      try {
-        const lockEntry = lockfile.skills[name];
-        const forceSha = lockEntry?.sha;
-        await installSingle(`${sourceStr}${refStr}`, { forceSha });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`  ${pc.red("✗")} Failed to install ${name}: ${message}`);
-      }
+      await installSingle(`${sourceStr}${refStr}`);
     } else {
       const verStr = entry.version ? `@${entry.version}` : "";
       console.log(`→ ${pc.bold(name)} ${pc.dim(`(${entry.source || name}${verStr})`)}`);
-
-      try {
-        const lockEntry = lockfile.skills[name];
-        const forceVersion = lockEntry?.version;
-        await installSingle(`${name}${verStr}`, { forceVersion });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`  ${pc.red("✗")} Failed to install ${name}: ${message}`);
-      }
+      await installSingle(`${name}${verStr}`);
     }
   }
 }

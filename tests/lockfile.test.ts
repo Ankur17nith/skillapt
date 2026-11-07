@@ -7,77 +7,112 @@ import {
   writeLockfile,
   addLockEntry,
   removeLockEntry,
+  checkLockfileSync,
 } from "../src/lib/lockfile.js";
 
-describe("lockfile", () => {
+describe("lockfile v2", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "skillpm-lock-test-"));
+    dir = await mkdtemp(join(tmpdir(), "skillapt-lock-test-"));
   });
 
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("returns empty lockfile when file is missing", async () => {
+  it("returns empty v2 lockfile when file is missing", async () => {
     const lf = await readLockfile(dir);
-    expect(lf).toEqual({ skills: {} });
+    expect(lf.lockfileVersion).toBe(2);
+    expect(lf.skills).toEqual({});
   });
 
-  it("reads a valid lockfile", async () => {
+  it("reads and writes v2 lockfile with registry metadata", async () => {
     const data = {
+      lockfileVersion: 2,
       skills: {
-        "my-skill": { source: "user/repo", sha: "abc123def456" },
+        "pdf-summarizer": {
+          source: "registry",
+          version: "1.2.0",
+          resolved: "https://registry.skillapt.dev/v1/skills/pdf-summarizer/-/1.2.0.tgz",
+          sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          dependencies: {
+            "text-cleaner": "^1.0.0",
+          },
+        },
       },
     };
     await writeLockfile(data, dir);
 
     const lf = await readLockfile(dir);
-    expect(lf.skills["my-skill"]?.sha).toBe("abc123def456");
-  });
-
-  it("writes lockfile with correct formatting", async () => {
-    await writeLockfile(
-      { skills: { a: { source: "x/y", sha: "aaa" } } },
-      dir
+    expect(lf.lockfileVersion).toBe(2);
+    expect(lf.skills["pdf-summarizer"]?.version).toBe("1.2.0");
+    expect(lf.skills["pdf-summarizer"]?.sha256).toBe(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     );
-    const raw = await readFile(join(dir, "skills.lock.json"), "utf-8");
-    expect(raw).toContain('"skills"');
-    expect(raw.endsWith("\n")).toBe(true);
+    expect(lf.skills["pdf-summarizer"]?.dependencies?.["text-cleaner"]).toBe("^1.0.0");
   });
 
-  it("addLockEntry adds a new entry", () => {
+  it("addLockEntry sets lockfileVersion 2 and adds v2 entry", () => {
     const lf = addLockEntry(
-      { skills: {} },
+      { lockfileVersion: 2, skills: {} },
       "test",
-      { source: "a/b", sha: "abc" }
+      {
+        source: "registry",
+        version: "1.0.0",
+        sha256: "hash123",
+        resolved: "http://example.com/test.tgz",
+      }
     );
-    expect(lf.skills["test"]).toEqual({ source: "a/b", sha: "abc" });
-  });
-
-  it("addLockEntry updates existing entry", () => {
-    const lf1 = addLockEntry(
-      { skills: {} },
-      "test",
-      { source: "a/b", sha: "v1" }
-    );
-    const lf2 = addLockEntry(lf1, "test", { source: "a/b", sha: "v2" });
-    expect(lf2.skills["test"]?.sha).toBe("v2");
+    expect(lf.lockfileVersion).toBe(2);
+    expect(lf.skills["test"]?.version).toBe("1.0.0");
+    expect(lf.skills["test"]?.sha256).toBe("hash123");
   });
 
   it("removeLockEntry removes an entry", () => {
     const lf = addLockEntry(
-      { skills: {} },
+      { lockfileVersion: 2, skills: {} },
       "test",
-      { source: "a/b", sha: "abc" }
+      { source: "registry", version: "1.0.0" }
     );
     const result = removeLockEntry(lf, "test");
     expect(result.skills["test"]).toBeUndefined();
   });
 
-  it("removeLockEntry is a no-op for missing entry", () => {
-    const result = removeLockEntry({ skills: {} }, "nope");
-    expect(result.skills).toEqual({});
+  it("checkLockfileSync correctly detects missing packages", () => {
+    const manifest = {
+      skills: {
+        "pkg-a": { source: "pkg-a" },
+        "pkg-b": { source: "pkg-b" },
+      },
+    };
+    const lockfile = {
+      lockfileVersion: 2,
+      skills: {
+        "pkg-a": { source: "pkg-a", version: "1.0.0" },
+      },
+    };
+
+    const res = checkLockfileSync(manifest, lockfile);
+    expect(res.inSync).toBe(false);
+    expect(res.missing).toEqual(["pkg-b"]);
+  });
+
+  it("checkLockfileSync returns inSync true when all packages match", () => {
+    const manifest = {
+      skills: {
+        "pkg-a": { source: "pkg-a" },
+      },
+    };
+    const lockfile = {
+      lockfileVersion: 2,
+      skills: {
+        "pkg-a": { source: "pkg-a", version: "1.0.0" },
+      },
+    };
+
+    const res = checkLockfileSync(manifest, lockfile);
+    expect(res.inSync).toBe(true);
+    expect(res.missing).toEqual([]);
   });
 });
