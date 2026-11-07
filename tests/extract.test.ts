@@ -200,4 +200,61 @@ describe("extractSkill", () => {
       })
     ).rejects.toThrow("escape");
   });
+
+  it("verifies sha256 and succeeds on match", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { createHash } = await import("node:crypto");
+
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": "# Verified Skill",
+    });
+
+    const fileBytes = await readFile(tarPath);
+    const correctHash = createHash("sha256").update(fileBytes).digest("hex");
+
+    const result = await extractSkill({
+      tarballStream: fileToWebStream(tarPath),
+      name: "verified-skill",
+      skillsDir,
+      expectedSha256: correctHash,
+    });
+
+    const files = await readdir(result);
+    expect(files).toContain("SKILL.md");
+  });
+
+  it("aborts before extraction on sha256 mismatch", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": "# Tampered Skill",
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "tampered-skill",
+        skillsDir,
+        expectedSha256: "0000000000000000000000000000000000000000000000000000000000000000",
+      })
+    ).rejects.toThrow("Integrity check failed");
+  });
+
+  it("extracts flat tarball without top-level repo-sha folder", async () => {
+    // Create archive directly at root
+    const flatDir = join(tmpDir, "flat-source");
+    await mkdir(flatDir, { recursive: true });
+    await writeFile(join(flatDir, "SKILL.md"), "# Flat Skill");
+
+    const flatTar = join(tmpDir, "flat.tar.gz");
+    const { create } = await import("tar");
+    await create({ gzip: true, file: flatTar, cwd: flatDir }, ["SKILL.md"]);
+
+    const result = await extractSkill({
+      tarballStream: fileToWebStream(flatTar),
+      name: "flat-skill",
+      skillsDir,
+    });
+
+    const files = await readdir(result);
+    expect(files).toContain("SKILL.md");
+  });
 });

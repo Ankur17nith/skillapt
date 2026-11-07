@@ -3,8 +3,12 @@ import { join } from "node:path";
 
 export interface LockEntry {
   source: string;
-  sha: string;
+  sha?: string;
+  version?: string;
+  resolved?: string;
+  sha256?: string;
   subpath?: string | null;
+  dependencies?: Record<string, string>;
 }
 
 export interface Lockfile {

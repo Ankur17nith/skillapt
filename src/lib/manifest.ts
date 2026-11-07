@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 const skillEntrySchema = z.object({
   source: z.string(),
+  version: z.string().optional(),
   ref: z.string().nullable().optional(),
   subpath: z.string().nullable().optional(),
 });

@@ -1,65 +1,161 @@
 import { extract } from "tar";
-import { mkdtemp, rm, rename, readdir, stat, access, mkdir } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
-import { join, resolve, normalize, isAbsolute, basename, sep } from "node:path";
+import { mkdtemp, rm, readdir, stat, access, mkdir, writeFile } from "node:fs/promises";
+import { join, resolve, normalize, isAbsolute, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { createHash } from "node:crypto";
 import { moveDir } from "./fs.js";
 
-/**
- * Safely extract a GitHub tarball into .skills/<name>/.
- *
- * Security checks:
- * 1. Extracts to a temp folder first (never directly to the target).
- * 2. Strips GitHub's top-level directory (repo-sha/).
- * 3. Blocks symlinks — GitHub tarballs shouldn't have them.
- * 4. Blocks absolute paths in tar entries.
- * 5. Blocks path traversal ("../" in any entry path).
- * 6. Validates the result contains SKILL.md or skill.json.
- * 7. Cleans up the temp folder on any error.
- */
-export async function extractSkill(options: {
+// ── Security Limits from SPEC.md ──
+
+/** Maximum compressed archive size: 5 MB */
+export const MAX_COMPRESSED_SIZE = 5 * 1024 * 1024; // 5,242,880 bytes
+
+/** Maximum uncompressed payload size: 25 MB (prevents zip bombs) */
+export const MAX_UNCOMPRESSED_SIZE = 25 * 1024 * 1024; // 26,214,400 bytes
+
+/** Maximum file count: 500 files */
+export const MAX_FILE_COUNT = 500;
+
+/** Maximum file path length: 255 characters */
+export const MAX_PATH_LENGTH = 255;
+
+export interface ExtractSkillOptions {
   tarballStream: ReadableStream<Uint8Array>;
   name: string;
   skillsDir: string;
   subpath?: string | null;
-}): Promise<string> {
-  const { tarballStream, name, skillsDir, subpath } = options;
+  expectedSha256?: string;
+}
 
-  // Validate skill name to prevent path traversal via the name itself
-  if (name.includes("..") || name.includes("/") || name.includes("\\") || isAbsolute(name)) {
-    throw new Error(`Invalid skill name: "${name}"`);
+/**
+ * Safely extract a skill tarball into skillsDir/<name>/.
+ *
+ * Security checks enforced:
+ * 1. Verifies SHA-256 hash BEFORE extraction if expectedSha256 is provided (aborts immediately on mismatch).
+ * 2. Enforces maximum compressed archive size (5 MB).
+ * 3. Enforces maximum uncompressed payload size (25 MB) to block zip bombs.
+ * 4. Enforces maximum file count (500 files) to block inode exhaustion.
+ * 5. Enforces maximum file path length (255 characters).
+ * 6. Blocks symlinks and hardlinks.
+ * 7. Blocks device nodes, FIFOs, and sockets.
+ * 8. Blocks absolute paths and path traversal ("..") in tar entries.
+ * 9. Rejects null bytes in paths.
+ * 10. Validates subpath doesn't escape extraction boundary.
+ * 11. Validates resulting package contains SKILL.md or skill.json.
+ * 12. Cleans up temp directories on error.
+ */
+export async function extractSkill(options: ExtractSkillOptions): Promise<string> {
+  const { tarballStream, name, skillsDir, subpath, expectedSha256 } = options;
+
+  // Validate skill name to prevent path traversal
+  validateSkillTargetName(name);
+
+  // Buffer the stream to calculate SHA-256 and enforce compressed size limit
+  const chunks: Uint8Array[] = [];
+  let totalCompressedBytes = 0;
+
+  const reader = tarballStream.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalCompressedBytes += value.byteLength;
+        if (totalCompressedBytes > MAX_COMPRESSED_SIZE) {
+          throw new Error(
+            `Security: tarball exceeds maximum compressed size of ${MAX_COMPRESSED_SIZE} bytes (5 MB). Aborting.`
+          );
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 
-  const targetDir = resolve(skillsDir, name);
-  const tmpDir = await mkdtemp(join(tmpdir(), "skillpm-extract-"));
+  // Combine chunks into single Buffer
+  const totalLength = chunks.reduce((acc, c) => acc + c.byteLength, 0);
+  const tarballBuffer = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    tarballBuffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  // Step 1: Verify SHA-256 BEFORE extracting if expectedSha256 is specified
+  if (expectedSha256) {
+    const computedSha256 = createHash("sha256").update(tarballBuffer).digest("hex");
+    const cleanExpected = expectedSha256.replace(/^sha256-/, "").trim().toLowerCase();
+    if (computedSha256.toLowerCase() !== cleanExpected) {
+      throw new Error(
+        `Integrity check failed for "${name}": expected sha256 ${cleanExpected}, got ${computedSha256}. Aborting.`
+      );
+    }
+  }
+
+  // Setup directories
+  const targetDir = resolveTargetDir(skillsDir, name);
+  const tmpDir = await mkdtemp(join(tmpdir(), "skillapt-extract-"));
   const extractDir = join(tmpDir, "contents");
 
   try {
-    // Create extraction directory
     await mkdir(extractDir, { recursive: true });
-
-    // Step 1: Save tarball to a temp file, then extract
     const tarFile = join(tmpDir, "archive.tar.gz");
-    const nodeStream = Readable.fromWeb(tarballStream as import("stream/web").ReadableStream<Uint8Array>);
-    await pipeline(nodeStream, createWriteStream(tarFile));
+    await writeFile(tarFile, tarballBuffer);
 
-    // Step 2: Extract with security checks
+    let uncompressedBytes = 0;
+    let fileCount = 0;
+
+    // Step 2: Extract with strict security guards
     await extract({
       file: tarFile,
       cwd: extractDir,
-      strip: 1, // Strip GitHub's top-level "repo-sha/" directory
       onReadEntry(entry) {
-        // SECURITY: Block symlinks
+        fileCount++;
+        if (fileCount > MAX_FILE_COUNT) {
+          throw new Error(
+            `Security: tarball contains more than ${MAX_FILE_COUNT} files. Aborting.`
+          );
+        }
+
+        uncompressedBytes += entry.size || 0;
+        if (uncompressedBytes > MAX_UNCOMPRESSED_SIZE) {
+          throw new Error(
+            `Security: tarball uncompressed size exceeds ${MAX_UNCOMPRESSED_SIZE} bytes (25 MB). Aborting.`
+          );
+        }
+
+        // SECURITY: Block path length exceeding 255 chars
+        if (entry.path.length > MAX_PATH_LENGTH) {
+          throw new Error(
+            `Security: path in tarball exceeds ${MAX_PATH_LENGTH} characters — "${entry.path.slice(0, 50)}...". Aborting.`
+          );
+        }
+
+        // SECURITY: Block null bytes
+        if (entry.path.includes("\0")) {
+          throw new Error(
+            `Security: tarball entry path contains null byte. Aborting.`
+          );
+        }
+
+        // SECURITY: Block symlinks and hardlinks
         if (entry.type === "SymbolicLink" || entry.type === "Link") {
           throw new Error(
-            `Security: tarball contains a symlink — "${entry.path}". Aborting.`
+            `Security: tarball contains a link — "${entry.path}". Aborting.`
+          );
+        }
+
+        // SECURITY: Only allow regular files and directories (block devices, fifos)
+        const allowedTypes = ["File", "Directory", "OldFile"];
+        if (!allowedTypes.includes(entry.type)) {
+          throw new Error(
+            `Security: tarball entry type "${entry.type}" is not permitted — "${entry.path}". Aborting.`
           );
         }
 
         // SECURITY: Block absolute paths
-        if (isAbsolute(entry.path)) {
+        if (isAbsolute(entry.path) || /^[a-zA-Z]:/.test(entry.path)) {
           throw new Error(
             `Security: tarball contains an absolute path — "${entry.path}". Aborting.`
           );
@@ -67,7 +163,11 @@ export async function extractSkill(options: {
 
         // SECURITY: Block path traversal
         const normalized = normalize(entry.path);
-        if (normalized.startsWith("..") || normalized.includes(`${sep}..`)) {
+        if (
+          normalized.startsWith("..") ||
+          normalized.includes(`${sep}..`) ||
+          normalized.includes(`..${sep}`)
+        ) {
           throw new Error(
             `Security: tarball contains a path traversal — "${entry.path}". Aborting.`
           );
@@ -75,13 +175,31 @@ export async function extractSkill(options: {
       },
     });
 
-    // Step 3: If a subpath was given, use only that subfolder
+    // Step 3: Determine real root directory inside archive
+    // If archive contains a single top-level directory (e.g. GitHub repo-sha/ or name/),
+    // normalize by pointing to that directory.
     let sourceDir = extractDir;
+    const topEntries = await readdir(extractDir);
+
+    if (topEntries.length === 1) {
+      const singlePath = join(extractDir, topEntries[0]);
+      const s = await stat(singlePath);
+      if (s.isDirectory()) {
+        sourceDir = singlePath;
+      }
+    }
+
+    // Step 4: If subpath specified, use only that subfolder
     if (subpath) {
-      const subDir = join(extractDir, subpath);
-      // SECURITY: Make sure the subpath doesn't escape
+      const subDir = join(sourceDir, subpath);
       const resolvedSub = resolve(subDir);
-      if (!resolvedSub.startsWith(resolve(extractDir))) {
+      const resolvedSource = resolve(sourceDir);
+
+      // SECURITY: Correct prefix check with directory boundary
+      if (
+        resolvedSub !== resolvedSource &&
+        !resolvedSub.startsWith(resolvedSource + sep)
+      ) {
         throw new Error(
           `Security: subpath "${subpath}" would escape the extraction directory.`
         );
@@ -90,9 +208,7 @@ export async function extractSkill(options: {
       try {
         await access(subDir);
       } catch {
-        throw new Error(
-          `Subpath "${subpath}" not found in the repository.`
-        );
+        throw new Error(`Subpath "${subpath}" not found in the repository.`);
       }
 
       const stats = await stat(subDir);
@@ -103,7 +219,7 @@ export async function extractSkill(options: {
       sourceDir = subDir;
     }
 
-    // Step 4: Validate the skill — must contain SKILL.md or skill.json
+    // Step 5: Validate package contents: must contain SKILL.md or skill.json
     const entries = await readdir(sourceDir);
     const hasSkillMd = entries.includes("SKILL.md");
     const hasSkillJson = entries.includes("skill.json");
@@ -114,18 +230,49 @@ export async function extractSkill(options: {
       );
     }
 
-    // Step 5: Move to the final target directory
-    // Remove existing installation if present
+    // Step 6: Move to target directory
     await rm(targetDir, { recursive: true, force: true });
-
-    // Ensure the parent skills directory exists
-    await mkdir(skillsDir, { recursive: true });
-
+    await mkdir(resolve(targetDir, ".."), { recursive: true });
     await moveDir(sourceDir, targetDir);
 
     return targetDir;
   } finally {
-    // ALWAYS clean up the temp folder
     await rm(tmpDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Validate that skill target name does not contain path traversal.
+ */
+function validateSkillTargetName(name: string): void {
+  if (!name || !name.trim()) {
+    throw new Error("Invalid skill name: cannot be empty.");
+  }
+  if (name.includes("..") || name.includes("\\") || isAbsolute(name)) {
+    throw new Error(`Invalid skill name: "${name}"`);
+  }
+  // Allow scoped packages e.g. @scope/name, but prevent multiple / or empty segments
+  const parts = name.split("/");
+  if (parts.length > 2) {
+    throw new Error(`Invalid skill name: "${name}"`);
+  }
+  if (parts.some((p) => !p || p === "." || p === "..")) {
+    throw new Error(`Invalid skill name: "${name}"`);
+  }
+}
+
+/**
+ * Resolve target destination path, ensuring it stays inside skillsDir.
+ */
+function resolveTargetDir(skillsDir: string, name: string): string {
+  const targetDir = resolve(skillsDir, name);
+  const resolvedSkillsDir = resolve(skillsDir);
+
+  if (
+    targetDir !== resolvedSkillsDir &&
+    !targetDir.startsWith(resolvedSkillsDir + sep)
+  ) {
+    throw new Error(`Security: skill target directory escapes "${skillsDir}".`);
+  }
+  return targetDir;
 }
