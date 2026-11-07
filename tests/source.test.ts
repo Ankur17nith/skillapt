@@ -1,113 +1,202 @@
 import { describe, it, expect } from "vitest";
-import { parseSource } from "../src/lib/source.js";
+import { parseSource, isGitHubSource, isRegistrySource } from "../src/lib/source.js";
 
 describe("parseSource", () => {
-  // ── Shorthand formats ──
+  // ── GitHub Shorthand formats ──
 
-  it("parses user/repo", () => {
-    expect(parseSource("user/repo")).toEqual({
+  it("parses user/repo as GitHub source", () => {
+    const res = parseSource("user/repo");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: null,
       subpath: null,
+      raw: "user/repo",
     });
   });
 
   it("parses user/repo@ref", () => {
-    expect(parseSource("user/repo@v1.0")).toEqual({
+    const res = parseSource("user/repo@v1.0");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: "v1.0",
       subpath: null,
+      raw: "user/repo@v1.0",
     });
   });
 
   it("parses user/repo@sha", () => {
-    expect(parseSource("user/repo@abc123")).toEqual({
+    const res = parseSource("user/repo@abc123");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: "abc123",
       subpath: null,
+      raw: "user/repo@abc123",
     });
   });
 
   it("parses user/repo/path/to/skill", () => {
-    expect(parseSource("user/repo/path/to/skill")).toEqual({
+    const res = parseSource("user/repo/path/to/skill");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: null,
       subpath: "path/to/skill",
+      raw: "user/repo/path/to/skill",
     });
   });
 
   it("parses user/repo/path/to/skill@ref", () => {
-    expect(parseSource("user/repo/skills/my-skill@main")).toEqual({
+    const res = parseSource("user/repo/skills/my-skill@main");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: "main",
       subpath: "skills/my-skill",
+      raw: "user/repo/skills/my-skill@main",
     });
   });
 
-  // ── URL formats ──
+  // ── GitHub URL formats ──
 
   it("parses https://github.com/user/repo", () => {
-    expect(parseSource("https://github.com/user/repo")).toEqual({
+    const res = parseSource("https://github.com/user/repo");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: null,
       subpath: null,
+      raw: "https://github.com/user/repo",
     });
   });
 
   it("parses URL with .git suffix", () => {
-    expect(parseSource("https://github.com/user/repo.git")).toEqual({
+    const res = parseSource("https://github.com/user/repo.git");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: null,
       subpath: null,
+      raw: "https://github.com/user/repo.git",
     });
   });
 
   it("parses URL with tree/branch/path", () => {
-    expect(
-      parseSource("https://github.com/user/repo/tree/main/skills/my-skill")
-    ).toEqual({
+    const res = parseSource("https://github.com/user/repo/tree/main/skills/my-skill");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: "main",
       subpath: "skills/my-skill",
+      raw: "https://github.com/user/repo/tree/main/skills/my-skill",
     });
   });
 
   it("parses URL with tree/branch and no subpath", () => {
-    expect(
-      parseSource("https://github.com/user/repo/tree/develop")
-    ).toEqual({
+    const res = parseSource("https://github.com/user/repo/tree/develop");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: "develop",
       subpath: null,
+      raw: "https://github.com/user/repo/tree/develop",
     });
   });
 
   it("handles trailing slashes in URLs", () => {
-    expect(parseSource("https://github.com/user/repo/")).toEqual({
+    const res = parseSource("https://github.com/user/repo/");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "github",
       owner: "user",
       repo: "repo",
       ref: null,
       subpath: null,
+      raw: "https://github.com/user/repo/",
     });
   });
 
-  // ── Whitespace handling ──
-
   it("trims whitespace", () => {
-    expect(parseSource("  user/repo  ")).toEqual({
-      owner: "user",
-      repo: "repo",
-      ref: null,
-      subpath: null,
+    const res = parseSource("  user/repo  ");
+    expect(isGitHubSource(res)).toBe(true);
+    expect(res.owner).toBe("user");
+    expect(res.repo).toBe("repo");
+  });
+
+  // ── Registry Source Formats (New) ──
+
+  it("parses bare skill name as Registry source", () => {
+    const res = parseSource("pdf-summarizer");
+    expect(isRegistrySource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "registry",
+      name: "pdf-summarizer",
+      range: null,
+      raw: "pdf-summarizer",
+    });
+  });
+
+  it("parses skill name with exact version as Registry source", () => {
+    const res = parseSource("pdf-summarizer@1.2.0");
+    expect(isRegistrySource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "registry",
+      name: "pdf-summarizer",
+      range: "1.2.0",
+      raw: "pdf-summarizer@1.2.0",
+    });
+  });
+
+  it("parses skill name with semver range as Registry source", () => {
+    const res = parseSource("text-cleaner@^1.0.0");
+    expect(isRegistrySource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "registry",
+      name: "text-cleaner",
+      range: "^1.0.0",
+      raw: "text-cleaner@^1.0.0",
+    });
+  });
+
+  it("parses scoped package name without range as Registry source", () => {
+    const res = parseSource("@acme/pdf-summarizer");
+    expect(isRegistrySource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "registry",
+      name: "@acme/pdf-summarizer",
+      range: null,
+      raw: "@acme/pdf-summarizer",
+    });
+  });
+
+  it("parses scoped package name with semver range as Registry source", () => {
+    const res = parseSource("@acme/pdf-summarizer@~2.1.0");
+    expect(isRegistrySource(res)).toBe(true);
+    expect(res).toEqual({
+      type: "registry",
+      name: "@acme/pdf-summarizer",
+      range: "~2.1.0",
+      raw: "@acme/pdf-summarizer@~2.1.0",
     });
   });
 
@@ -119,10 +208,6 @@ describe("parseSource", () => {
 
   it("throws on whitespace only", () => {
     expect(() => parseSource("   ")).toThrow("cannot be empty");
-  });
-
-  it("throws on single word (no slash)", () => {
-    expect(() => parseSource("justrepo")).toThrow("user/repo");
   });
 
   it("throws on non-GitHub URL", () => {
@@ -147,5 +232,14 @@ describe("parseSource", () => {
     expect(() =>
       parseSource("https://github.com/user/repo/tree/")
     ).toThrow("missing ref");
+  });
+
+  it("throws on invalid registry package name", () => {
+    expect(() => parseSource("-invalid-name")).toThrow("Invalid package name");
+    expect(() => parseSource("ab")).toThrow("Invalid package name");
+  });
+
+  it("throws on empty range after @ for registry package", () => {
+    expect(() => parseSource("pdf-summarizer@")).toThrow("empty version range");
   });
 });

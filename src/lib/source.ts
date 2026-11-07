@@ -1,37 +1,89 @@
-export interface ParsedSource {
+export interface BaseSource {
+  type: "github" | "registry";
+  raw: string;
+}
+
+export interface GitHubSource extends BaseSource {
+  type: "github";
   owner: string;
   repo: string;
   ref: string | null;
   subpath: string | null;
 }
 
+export interface RegistrySource extends BaseSource {
+  type: "registry";
+  name: string;
+  range: string | null;
+}
+
+export type SkillSource = GitHubSource | RegistrySource;
+
+// Backward-compatible alias for existing code
+export type ParsedSource = GitHubSource;
+
 /**
- * Parse a skill source string into its components.
- *
- * Supported formats:
- *   "user/repo"
- *   "user/repo@ref"            (branch, tag, or SHA)
- *   "user/repo/path/to/skill"
- *   "user/repo/path/to/skill@ref"
- *   "https://github.com/user/repo"
- *   "https://github.com/user/repo/tree/branch/path"
+ * Validate a package name according to the registry specification:
+ * 3 to 50 characters, lowercase alphanumeric and hyphens.
+ * May optionally have a scope prefix: @<scope>/<name> (scope 2 to 30 chars).
  */
-export function parseSource(input: string): ParsedSource {
+export const REGISTRY_NAME_REGEX =
+  /^(@[a-z0-9-]{2,30}\/)?[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+
+/**
+ * Checks if a string is a valid registry package name.
+ */
+export function isValidRegistryName(name: string): boolean {
+  return REGISTRY_NAME_REGEX.test(name);
+}
+
+/**
+ * Type guard for GitHubSource
+ */
+export function isGitHubSource(source: SkillSource): source is GitHubSource {
+  return source.type === "github";
+}
+
+/**
+ * Type guard for RegistrySource
+ */
+export function isRegistrySource(source: SkillSource): source is RegistrySource {
+  return source.type === "registry";
+}
+
+/**
+ * Parse an input string into either a GitHubSource or a RegistrySource.
+ *
+ * Rules:
+ *   - "name" or "name@range" or "@scope/name" or "@scope/name@range" -> RegistrySource
+ *   - "user/repo", "user/repo@ref", "user/repo/subpath@ref", or github.com URL -> GitHubSource
+ */
+export function parseSource(input: string): SkillSource {
   const trimmed = input.trim();
   if (!trimmed) {
     throw new Error("Skill source cannot be empty.");
   }
 
-  // Try URL format first
+  // URL format (e.g. https://github.com/user/repo)
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return parseUrl(trimmed);
   }
 
-  // Shorthand format: user/repo, user/repo@ref, user/repo/subpath@ref
-  return parseShorthand(trimmed);
+  // Scoped registry package: @scope/name or @scope/name@range
+  if (trimmed.startsWith("@")) {
+    return parseScopedRegistrySource(trimmed);
+  }
+
+  // If it contains a slash, it's a GitHub shorthand (user/repo or user/repo/subpath)
+  if (trimmed.includes("/")) {
+    return parseGitHubShorthand(trimmed);
+  }
+
+  // Otherwise, it's an unscoped registry package: name or name@range
+  return parseUnscopedRegistrySource(trimmed);
 }
 
-function parseUrl(input: string): ParsedSource {
+function parseUrl(input: string): GitHubSource {
   let url: URL;
   try {
     url = new URL(input);
@@ -45,7 +97,7 @@ function parseUrl(input: string): ParsedSource {
     );
   }
 
-  // Remove leading slash and split: /user/repo/tree/branch/path
+  // Remove leading and trailing slashes, then split
   const parts = url.pathname.replace(/^\//, "").replace(/\/$/, "").split("/");
 
   if (parts.length < 2 || !parts[0] || !parts[1]) {
@@ -55,15 +107,19 @@ function parseUrl(input: string): ParsedSource {
   }
 
   const owner = parts[0];
-  // Strip .git suffix from repo name
   const repo = parts[1].replace(/\.git$/, "");
 
-  // Simple case: https://github.com/user/repo
   if (parts.length === 2) {
-    return { owner, repo, ref: null, subpath: null };
+    return {
+      type: "github",
+      owner,
+      repo,
+      ref: null,
+      subpath: null,
+      raw: input,
+    };
   }
 
-  // Must be /tree/<ref>/... format
   if (parts[2] !== "tree") {
     throw new Error(
       `Invalid GitHub URL — expected /tree/<ref>/... after repo. Got: "${input}"`
@@ -80,11 +136,17 @@ function parseUrl(input: string): ParsedSource {
   const subpathParts = parts.slice(4).filter(Boolean);
   const subpath = subpathParts.length > 0 ? subpathParts.join("/") : null;
 
-  return { owner, repo, ref, subpath };
+  return {
+    type: "github",
+    owner,
+    repo,
+    ref,
+    subpath,
+    raw: input,
+  };
 }
 
-function parseShorthand(input: string): ParsedSource {
-  // Split off @ref if present
+function parseGitHubShorthand(input: string): GitHubSource {
   let ref: string | null = null;
   let rest = input;
 
@@ -105,7 +167,6 @@ function parseShorthand(input: string): ParsedSource {
     );
   }
 
-  // Validate owner and repo (no weird characters)
   const validNameRe = /^[a-zA-Z0-9._-]+$/;
   const owner = parts[0];
   const repo = parts[1];
@@ -120,5 +181,80 @@ function parseShorthand(input: string): ParsedSource {
   const subpathParts = parts.slice(2);
   const subpath = subpathParts.length > 0 ? subpathParts.join("/") : null;
 
-  return { owner, repo, ref, subpath };
+  return {
+    type: "github",
+    owner,
+    repo,
+    ref,
+    subpath,
+    raw: input,
+  };
+}
+
+function parseScopedRegistrySource(input: string): RegistrySource {
+  // e.g. @scope/name or @scope/name@^1.0.0
+  const slashIndex = input.indexOf("/");
+  if (slashIndex === -1) {
+    throw new Error(
+      `Invalid scoped skill name — expected "@scope/name". Got: "${input}"`
+    );
+  }
+
+  // Look for @ version delimiter after the scope slash
+  const versionAtIndex = input.indexOf("@", slashIndex);
+  let name: string;
+  let range: string | null = null;
+
+  if (versionAtIndex !== -1) {
+    name = input.slice(0, versionAtIndex);
+    range = input.slice(versionAtIndex + 1).trim();
+    if (!range) {
+      throw new Error(`Invalid source — empty version range after @. Got: "${input}"`);
+    }
+  } else {
+    name = input;
+  }
+
+  if (!isValidRegistryName(name)) {
+    throw new Error(
+      `Invalid scoped package name "${name}". Scope must be 2-30 chars and name 3-50 lowercase alphanumeric and hyphens.`
+    );
+  }
+
+  return {
+    type: "registry",
+    name,
+    range: range || null,
+    raw: input,
+  };
+}
+
+function parseUnscopedRegistrySource(input: string): RegistrySource {
+  // e.g. "pdf-summarizer" or "pdf-summarizer@^1.0.0"
+  const atIndex = input.indexOf("@");
+  let name: string;
+  let range: string | null = null;
+
+  if (atIndex !== -1) {
+    name = input.slice(0, atIndex);
+    range = input.slice(atIndex + 1).trim();
+    if (!range) {
+      throw new Error(`Invalid source — empty version range after @. Got: "${input}"`);
+    }
+  } else {
+    name = input;
+  }
+
+  if (!isValidRegistryName(name)) {
+    throw new Error(
+      `Invalid package name "${name}". Names must be 3-50 lowercase alphanumeric characters and hyphens.`
+    );
+  }
+
+  return {
+    type: "registry",
+    name,
+    range: range || null,
+    raw: input,
+  };
 }

@@ -1,5 +1,5 @@
 import pc from "picocolors";
-import { parseSource } from "../lib/source.js";
+import { parseSource, type SkillSource, type GitHubSource, type RegistrySource } from "../lib/source.js";
 import { resolveRef, downloadTarball } from "../lib/github.js";
 import { extractSkill } from "../lib/extract.js";
 import { readManifest, writeManifest, addSkill } from "../lib/manifest.js";
@@ -26,8 +26,20 @@ async function installSingle(
   source: string,
   options?: { forceSha?: string }
 ): Promise<void> {
-  const skillsDir = getSkillsDir();
   const parsed = parseSource(source);
+
+  if (parsed.type === "github") {
+    await installGitHub(parsed, options);
+  } else {
+    await installRegistry(parsed);
+  }
+}
+
+async function installGitHub(
+  parsed: GitHubSource,
+  options?: { forceSha?: string }
+): Promise<void> {
+  const skillsDir = getSkillsDir();
   const refLabel = parsed.ref ?? "HEAD";
 
   console.log(
@@ -84,6 +96,15 @@ async function installSingle(
 
   console.log(`${getBanner()}`);
   console.log(`${pc.green("✓")} Installed ${pc.bold(name)} ${pc.dim(`(${shortSha})`)}`);
+}
+
+async function installRegistry(
+  parsed: RegistrySource
+): Promise<void> {
+  // Registry installation will be implemented in Task 3
+  const rangeLabel = parsed.range ? `@${parsed.range}` : "";
+  console.log(pc.dim(`Selected registry source for ${parsed.name}${rangeLabel}`));
+  throw new Error(`Registry installation for "${parsed.name}${rangeLabel}" will be active in the next step.`);
 }
 
 async function installAll(): Promise<void> {
