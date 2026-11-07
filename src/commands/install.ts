@@ -19,9 +19,12 @@ import { moveDir } from "../lib/fs.js";
 import { getBanner } from "../lib/banner.js";
 import { RegistryClient } from "../lib/registry.js";
 import { DependencyResolver } from "../lib/dependencies.js";
+import { syncSkillToTarget } from "../lib/targets.js";
 
 export interface InstallOptions {
   frozen?: boolean;
+  target?: string;
+  global?: boolean;
 }
 
 export async function installCommand(
@@ -33,7 +36,7 @@ export async function installCommand(
   }
 
   if (source) {
-    await installSingle(source);
+    await installSingle(source, options);
   } else {
     await installAll(options);
   }
@@ -41,7 +44,7 @@ export async function installCommand(
 
 export async function installSingle(
   source: string,
-  options?: { forceSha?: string; forceVersion?: string }
+  options?: { forceSha?: string; forceVersion?: string; target?: string; global?: boolean }
 ): Promise<void> {
   const parsed = parseSource(source);
 
@@ -54,7 +57,7 @@ export async function installSingle(
 
 async function installGitHub(
   parsed: GitHubSource,
-  options?: { forceSha?: string }
+  options?: { forceSha?: string; target?: string; global?: boolean }
 ): Promise<void> {
   const skillsDir = getSkillsDir();
   const refLabel = parsed.ref ?? "HEAD";
@@ -113,11 +116,13 @@ async function installGitHub(
 
   console.log(`${getBanner()}`);
   console.log(`${pc.green("✓")} Installed ${pc.bold(name)} ${pc.dim(`(${shortSha})`)}`);
+
+  await syncTargets([name], options);
 }
 
 async function installRegistry(
   parsed: RegistrySource,
-  options?: { forceVersion?: string }
+  options?: { forceVersion?: string; target?: string; global?: boolean }
 ): Promise<void> {
   const skillsDir = getSkillsDir();
   const client = new RegistryClient();
@@ -167,6 +172,32 @@ async function installRegistry(
   console.log(`${getBanner()}`);
   console.log(`${pc.green("✓")} Installed skills:`);
   console.log(treeString);
+
+  await syncTargets(Array.from(packages.keys()), options);
+}
+
+async function syncTargets(
+  skillNames: string[],
+  options?: { target?: string; global?: boolean }
+): Promise<void> {
+  if (!options?.target) return;
+  const targets = options.target.split(",").map((t) => t.trim()).filter(Boolean);
+  const skillsDir = getSkillsDir();
+
+  for (const target of targets) {
+    for (const name of skillNames) {
+      const sourceDir = join(skillsDir, name);
+      const res = await syncSkillToTarget({
+        skillName: name,
+        sourceDir,
+        target,
+        global: options.global,
+      });
+      console.log(
+        `${pc.green("✓")} Synced ${pc.bold(name)} to ${pc.cyan(res.target)} (${res.mode}: ${pc.dim(res.targetPath)})`
+      );
+    }
+  }
 }
 
 /**
@@ -246,6 +277,7 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
     }
 
     console.log(`\n${pc.green("✓")} All skills installed successfully from lockfile.`);
+    await syncTargets(lockedSkills.map(([name]) => name), options);
     return;
   }
 

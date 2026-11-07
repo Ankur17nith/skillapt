@@ -56,8 +56,10 @@ program
   .command("install [source]")
   .description("Install a skill from the registry or GitHub, or install all from skills.json")
   .option("--frozen", "fail if skills.lock.json is missing or out of sync (for CI)")
+  .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex)")
+  .option("-g, --global", "install target skills globally to user home directory")
   .action(
-    wrap(async (source?: string, opts?: { frozen?: boolean }) => {
+    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean }) => {
       await installCommand(source, opts);
     })
   );
