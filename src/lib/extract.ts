@@ -1,9 +1,14 @@
 import { extract } from "tar";
-import { mkdtemp, rm, readdir, stat, access, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readdir, stat, access, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join, resolve, normalize, isAbsolute, sep } from "node:path";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
+import { createInterface } from "node:readline";
+import pc from "picocolors";
 import { moveDir, assertInside } from "./fs.js";
+import { validateSkillTree, parseFrontmatter } from "./validation.js";
+import { isValidRegistryName } from "./source.js";
 
 // ── Security Limits from SPEC.md ──
 
@@ -25,6 +30,9 @@ export interface ExtractSkillOptions {
   skillsDir: string;
   subpath?: string | null;
   expectedSha256?: string;
+  allowExt?: string[];
+  isGitHub?: boolean;
+  yes?: boolean;
 }
 
 /**
@@ -41,11 +49,14 @@ export interface ExtractSkillOptions {
  * 8. Blocks absolute paths and path traversal ("..") in tar entries.
  * 9. Rejects null bytes in paths.
  * 10. Validates subpath doesn't escape extraction boundary.
- * 11. Validates resulting package contains SKILL.md or skill.json.
- * 12. Cleans up temp directories on error.
+ * 11. Validates resulting package contains SKILL.md with frontmatter matching name.
+ * 12. Validates extension allowlist, banned extensions, magic bytes, duplicate paths (case-insensitive & NFC), max depth.
+ * 13. Verifies declared permissions and scripts, prompting or requiring --yes for elevated permissions.
+ * 14. Extracts into a temp dir and swaps atomically so failed installs never delete the previous version.
+ * 15. Cleans up temp directories on error.
  */
 export async function extractSkill(options: ExtractSkillOptions): Promise<string> {
-  const { tarballStream, name, skillsDir, subpath, expectedSha256 } = options;
+  const { tarballStream, name, skillsDir, subpath, expectedSha256, allowExt, isGitHub, yes } = options;
 
   // Validate skill name to prevent path traversal
   validateSkillTargetName(name);
@@ -94,7 +105,6 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
   }
 
   // Setup directories
-  const targetDir = assertInside(skillsDir, name);
   const tmpDir = await mkdtemp(join(tmpdir(), "skillapt-extract-"));
   const extractDir = join(tmpDir, "contents");
 
@@ -176,8 +186,6 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
     });
 
     // Step 3: Determine real root directory inside archive
-    // If archive contains a single top-level directory (e.g. GitHub repo-sha/ or name/),
-    // normalize by pointing to that directory.
     let sourceDir = extractDir;
     const topEntries = await readdir(extractDir);
 
@@ -207,21 +215,103 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
       sourceDir = subDir;
     }
 
-    // Step 5: Validate package contents: must contain SKILL.md or skill.json
-    const entries = await readdir(sourceDir);
-    const hasSkillMd = entries.includes("SKILL.md");
-    const hasSkillJson = entries.includes("skill.json");
+    // Determine effective skill name (for GitHub, inspect skill.json / SKILL.md if present)
+    let effectiveName = name;
+    if (isGitHub) {
+      try {
+        const raw = await readFile(join(sourceDir, "skill.json"), "utf-8");
+        const json = JSON.parse(raw);
+        if (typeof json.name === "string" && isValidRegistryName(json.name.trim())) {
+          effectiveName = json.name.trim();
+        }
+      } catch {
+        try {
+          const rawMd = await readFile(join(sourceDir, "SKILL.md"), "utf-8");
+          const fm = parseFrontmatter(rawMd);
+          if (fm.name && isValidRegistryName(fm.name.trim())) {
+            effectiveName = fm.name.trim();
+          }
+        } catch {
+          // keep effectiveName = name
+        }
+      }
+    }
 
-    if (!hasSkillMd && !hasSkillJson) {
-      throw new Error(
-        "This repo is not a valid skill — it must contain a SKILL.md or skill.json file."
+    // Step 5: Content Verification on extracted tree BEFORE touching targetDir
+    const treeResult = await validateSkillTree(sourceDir, {
+      expectedName: effectiveName,
+      allowExt,
+      isGitHub,
+    });
+
+    if (isGitHub && treeResult.skippedFiles.length > 0) {
+      console.warn(
+        pc.yellow(
+          `Warning: Skipped ${treeResult.skippedFiles.length} file(s) from GitHub repository not in allowed extensions list:\n  ${treeResult.skippedFiles.slice(0, 10).join("\n  ")}${treeResult.skippedFiles.length > 10 ? `\n  ... and ${treeResult.skippedFiles.length - 10} more` : ""}`
+        )
       );
     }
 
-    // Step 6: Move to target directory
-    await rm(targetDir, { recursive: true, force: true });
+    // Step 6: Print declared permissions & require confirmation for elevated permissions
+    let permissions = { network: false, shell: false, filesystem: "none" };
+    try {
+      const raw = await readFile(join(sourceDir, "skill.json"), "utf-8");
+      const json = JSON.parse(raw);
+      if (json.permissions && typeof json.permissions === "object") {
+        permissions = {
+          network: Boolean(json.permissions.network),
+          shell: Boolean(json.permissions.shell),
+          filesystem: typeof json.permissions.filesystem === "string" ? json.permissions.filesystem : "none",
+        };
+      }
+    } catch {
+      // default permissions
+    }
+
+    console.log(pc.bold(`\nDeclared permissions for ${effectiveName}:`));
+    console.log(`  • Network:    ${permissions.network ? pc.yellow("true") : pc.green("false")}`);
+    console.log(`  • Shell:      ${permissions.shell ? pc.yellow("true") : pc.green("false")}`);
+    console.log(`  • Filesystem: ${permissions.filesystem !== "none" ? pc.yellow(permissions.filesystem) : pc.green("none")}`);
+    console.log(`  • Scripts:    ${treeResult.hasScripts ? pc.yellow("yes (contains scripts/)") : pc.green("no")}`);
+
+    if (permissions.network || permissions.shell) {
+      if (!yes) {
+        if (process.stdin.isTTY) {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          const reasons = [permissions.network && "network", permissions.shell && "shell"].filter(Boolean).join(", ");
+          const answer = await new Promise<string>((resolve) => {
+            rl.question(`Skill "${effectiveName}" requests elevated permissions (${reasons}). Proceed with install? [y/N] `, resolve);
+          });
+          rl.close();
+          if (!/^y(es)?$/i.test(answer.trim())) {
+            throw new Error(`Installation of "${effectiveName}" aborted by user.`);
+          }
+        } else {
+          const reasons = [permissions.network && "network", permissions.shell && "shell"].filter(Boolean).join(", ");
+          throw new Error(
+            `Skill "${effectiveName}" requests elevated permissions (${reasons}). Pass --yes (-y) to confirm.`
+          );
+        }
+      }
+    }
+
+    // Step 7: Atomic swap into targetDir
+    const targetDir = assertInside(skillsDir, effectiveName);
     await mkdir(resolve(targetDir, ".."), { recursive: true });
-    await moveDir(sourceDir, targetDir);
+
+    if (existsSync(targetDir)) {
+      const backupDir = join(tmpDir, `backup-target-${Date.now()}`);
+      await moveDir(targetDir, backupDir);
+      try {
+        await moveDir(sourceDir, targetDir);
+      } catch (err) {
+        // Rollback on failure
+        await moveDir(backupDir, targetDir);
+        throw err;
+      }
+    } else {
+      await moveDir(sourceDir, targetDir);
+    }
 
     return targetDir;
   } finally {

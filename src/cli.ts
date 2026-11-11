@@ -58,9 +58,17 @@ program
   .option("--frozen", "fail if skills.lock.json is missing or out of sync (for CI)")
   .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex)")
   .option("-g, --global", "install target skills globally to user home directory")
+  .option("-y, --yes", "automatically confirm permissions prompts")
+  .option("--allow-ext <extensions>", "additional allowed file extensions for GitHub installs (comma-separated)")
   .action(
-    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean }) => {
-      await installCommand(source, opts);
+    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean; yes?: boolean; allowExt?: string }) => {
+      await installCommand(source, {
+        frozen: opts?.frozen,
+        target: opts?.target,
+        global: opts?.global,
+        yes: opts?.yes,
+        allowExt: opts?.allowExt ? opts.allowExt.split(",").map((e) => e.trim()).filter(Boolean) : undefined,
+      });
     })
   );
 

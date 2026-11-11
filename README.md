@@ -284,6 +284,8 @@ my-skill/
 }
 ```
 
+> **Note on Permissions**: Skill permissions (`network`, `shell`, `filesystem`) are author declarations for agent awareness and user safety prompts, not kernel-level runtime enforcement. Client runtimes, agent hosts, and sandboxes are responsible for enforcing runtime isolation.
+
 ### `SKILL.md` (Agent Skills Open Standard)
 Must begin with YAML frontmatter demarcated by triple dashes (`---`):
 ```markdown

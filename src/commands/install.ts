@@ -33,6 +33,8 @@ export interface InstallOptions {
   frozen?: boolean;
   target?: string;
   global?: boolean;
+  yes?: boolean;
+  allowExt?: string[];
 }
 
 export async function installCommand(
@@ -52,7 +54,14 @@ export async function installCommand(
 
 export async function installSingle(
   source: string,
-  options?: { forceSha?: string; forceVersion?: string; target?: string; global?: boolean }
+  options?: {
+    forceSha?: string;
+    forceVersion?: string;
+    target?: string;
+    global?: boolean;
+    yes?: boolean;
+    allowExt?: string[];
+  }
 ): Promise<void> {
   const parsed = parseSource(source);
 
@@ -65,7 +74,13 @@ export async function installSingle(
 
 async function installGitHub(
   parsed: GitHubSource,
-  options?: { forceSha?: string; target?: string; global?: boolean }
+  options?: {
+    forceSha?: string;
+    target?: string;
+    global?: boolean;
+    yes?: boolean;
+    allowExt?: string[];
+  }
 ): Promise<void> {
   const skillsDir = getSkillsDir();
   const refLabel = parsed.ref ?? "HEAD";
@@ -92,6 +107,9 @@ async function installGitHub(
     name: defaultName,
     skillsDir,
     subpath: parsed.subpath,
+    allowExt: options?.allowExt,
+    isGitHub: true,
+    yes: options?.yes,
   });
 
   // Try to read a name from skill.json
@@ -100,11 +118,11 @@ async function installGitHub(
     throw new Error(`Invalid skill name "${name}".`);
   }
 
-  // If skill.json provided a different name, rename the directory
-  if (name !== defaultName) {
-    const newDir = assertInside(skillsDir, name);
-    await rm(newDir, { recursive: true, force: true });
-    await moveDir(installDir, newDir);
+  // If skill.json provided a different name, ensure it's in the expected directory
+  const expectedDir = assertInside(skillsDir, name);
+  if (installDir !== expectedDir) {
+    await rm(expectedDir, { recursive: true, force: true });
+    await moveDir(installDir, expectedDir);
   }
 
   // Update skills.json
@@ -133,7 +151,12 @@ async function installGitHub(
 
 async function installRegistry(
   parsed: RegistrySource,
-  options?: { forceVersion?: string; target?: string; global?: boolean }
+  options?: {
+    forceVersion?: string;
+    target?: string;
+    global?: boolean;
+    yes?: boolean;
+  }
 ): Promise<void> {
   const skillsDir = getSkillsDir();
   const client = new RegistryClient();
@@ -158,6 +181,7 @@ async function installRegistry(
       name: pkg.name,
       skillsDir,
       expectedSha256: pkg.sha256,
+      yes: options?.yes,
     });
 
     lockfile = addLockEntry(lockfile, pkg.name, {
@@ -271,6 +295,7 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
           name,
           skillsDir,
           expectedSha256: entry.sha256,
+          yes: options.yes,
         });
       } else {
         // GitHub skill from lockfile
@@ -291,6 +316,9 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
           name,
           skillsDir,
           subpath: entry.subpath,
+          allowExt: options.allowExt,
+          isGitHub: true,
+          yes: options.yes,
         });
       }
     }
@@ -322,11 +350,11 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
       const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
       const refStr = entry.ref ? `@${entry.ref}` : "";
       console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr}${refStr})`)}`);
-      await installSingle(`${sourceStr}${refStr}`);
+      await installSingle(`${sourceStr}${refStr}`, options);
     } else {
       const verStr = entry.version ? `@${entry.version}` : "";
       console.log(`→ ${pc.bold(name)} ${pc.dim(`(${entry.source || name}${verStr})`)}`);
-      await installSingle(`${name}${verStr}`);
+      await installSingle(`${name}${verStr}`, options);
     }
   }
 }

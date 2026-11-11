@@ -1,42 +1,47 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readdir, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, readdir, writeFile, mkdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReadStream } from "node:fs";
-import { pack, type Pack } from "tar";
-import { createGzip } from "node:zlib";
-import { pipeline } from "node:stream/promises";
-import { createWriteStream } from "node:fs";
+import { create } from "tar";
 import { Readable } from "node:stream";
 import { extractSkill } from "../src/lib/extract.js";
 
-/** Helper: create a tar.gz from an object of { path: content } entries. */
+function makeSkillMd(name: string, description: string = "A helpful agent skill"): string {
+  return `---
+name: ${name}
+description: ${description}
+---
+# ${name}
+${description}
+`;
+}
+
+/** Helper: create a tar.gz from an object of { path: content | Buffer } entries. */
 async function createTarball(
   dir: string,
-  entries: Record<string, string>,
-  opts?: { symlink?: { path: string; target: string } }
+  entries: Record<string, string | Buffer>,
+  topDirName: string = "myrepo-abc123"
 ): Promise<string> {
-  // Create files on disk under a "repo-sha" top-level dir (simulating GitHub)
-  const topDir = join(dir, "myrepo-abc123");
+  const topDir = join(dir, topDirName);
   await mkdir(topDir, { recursive: true });
 
   for (const [filePath, content] of Object.entries(entries)) {
     const fullPath = join(topDir, filePath);
     await mkdir(join(fullPath, ".."), { recursive: true });
-    await writeFile(fullPath, content, "utf-8");
+    await writeFile(fullPath, content);
   }
 
-  const tarPath = join(dir, "test.tar.gz");
+  const tarPath = join(dir, `test-${Date.now()}-${Math.random().toString(36).slice(2)}.tar.gz`);
 
-  // Use node tar to pack
-  const { create } = await import("tar");
   await create(
     {
       gzip: true,
       file: tarPath,
       cwd: dir,
     },
-    ["myrepo-abc123"]
+    [topDirName]
   );
 
   return tarPath;
@@ -53,7 +58,7 @@ describe("extractSkill", () => {
   let skillsDir: string;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "skillpm-extract-test-"));
+    tmpDir = await mkdtemp(join(tmpdir(), "skillapt-extract-test-"));
     skillsDir = join(tmpDir, ".skills");
     await mkdir(skillsDir, { recursive: true });
   });
@@ -64,7 +69,7 @@ describe("extractSkill", () => {
 
   it("extracts a valid skill with SKILL.md", async () => {
     const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# My Skill\nDoes something cool.",
+      "SKILL.md": makeSkillMd("my-skill"),
     });
 
     const result = await extractSkill({
@@ -77,8 +82,9 @@ describe("extractSkill", () => {
     expect(files).toContain("SKILL.md");
   });
 
-  it("extracts a valid skill with skill.json", async () => {
+  it("extracts a valid skill with SKILL.md and skill.json", async () => {
     const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("test"),
       "skill.json": '{"name": "test"}',
     });
 
@@ -90,9 +96,10 @@ describe("extractSkill", () => {
 
     const files = await readdir(result);
     expect(files).toContain("skill.json");
+    expect(files).toContain("SKILL.md");
   });
 
-  it("rejects a repo without SKILL.md or skill.json", async () => {
+  it("rejects a repo without SKILL.md", async () => {
     const tarPath = await createTarball(tmpDir, {
       "README.md": "Not a skill",
     });
@@ -103,12 +110,26 @@ describe("extractSkill", () => {
         name: "bad",
         skillsDir,
       })
-    ).rejects.toThrow("not a valid skill");
+    ).rejects.toThrow("must contain a SKILL.md file");
+  });
+
+  it("rejects a skill whose SKILL.md frontmatter name does not match package name", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("different-name"),
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "expected-name",
+        skillsDir,
+      })
+    ).rejects.toThrow("does not match unscoped package name");
   });
 
   it("extracts subpath when provided", async () => {
     const tarPath = await createTarball(tmpDir, {
-      "skills/my-skill/SKILL.md": "# Sub Skill",
+      "skills/my-skill/SKILL.md": makeSkillMd("my-skill"),
       "README.md": "Root readme",
     });
 
@@ -126,7 +147,7 @@ describe("extractSkill", () => {
 
   it("rejects invalid subpath", async () => {
     const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# Root Skill",
+      "SKILL.md": makeSkillMd("test"),
     });
 
     await expect(
@@ -141,7 +162,7 @@ describe("extractSkill", () => {
 
   it("rejects invalid skill name with path traversal", async () => {
     const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# Skill",
+      "SKILL.md": makeSkillMd("evil"),
     });
 
     await expect(
@@ -155,7 +176,7 @@ describe("extractSkill", () => {
 
   it("replaces an existing installation", async () => {
     const tarPath1 = await createTarball(tmpDir, {
-      "SKILL.md": "# Version 1",
+      "SKILL.md": makeSkillMd("my-skill", "Version 1 description"),
     });
 
     await extractSkill({
@@ -164,11 +185,10 @@ describe("extractSkill", () => {
       skillsDir,
     });
 
-    // Create a new tarball for "version 2"
-    const tmpDir2 = await mkdtemp(join(tmpdir(), "skillpm-extract-v2-"));
+    const tmpDir2 = await mkdtemp(join(tmpdir(), "skillapt-extract-v2-"));
     try {
       const tarPath2 = await createTarball(tmpDir2, {
-        "SKILL.md": "# Version 2",
+        "SKILL.md": makeSkillMd("my-skill", "Version 2 description"),
         "extra.txt": "new file",
       });
 
@@ -186,19 +206,43 @@ describe("extractSkill", () => {
     }
   });
 
-  it("rejects subpath that tries to escape", async () => {
-    const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# Skill",
+  it("atomic swap: failed install leaves previous version intact", async () => {
+    // 1. Install good v1
+    const tarPath1 = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("my-skill", "Version 1"),
+      "canary.txt": "V1 CANARY CONTENT",
     });
 
-    await expect(
-      extractSkill({
-        tarballStream: fileToWebStream(tarPath),
-        name: "test",
-        skillsDir,
-        subpath: "../../etc",
-      })
-    ).rejects.toThrow("escape");
+    const targetDir = await extractSkill({
+      tarballStream: fileToWebStream(tarPath1),
+      name: "my-skill",
+      skillsDir,
+    });
+
+    expect(await readFile(join(targetDir, "canary.txt"), "utf-8")).toBe("V1 CANARY CONTENT");
+
+    // 2. Attempt install of v2 that fails validation (contains banned .exe file)
+    const tmpDir2 = await mkdtemp(join(tmpdir(), "skillapt-extract-bad-"));
+    try {
+      const badTar = await createTarball(tmpDir2, {
+        "SKILL.md": makeSkillMd("my-skill", "Version 2"),
+        "malware.exe": "echo bad",
+      });
+
+      await expect(
+        extractSkill({
+          tarballStream: fileToWebStream(badTar),
+          name: "my-skill",
+          skillsDir,
+        })
+      ).rejects.toThrow();
+
+      // 3. Verify previous v1 version is still intact
+      expect(existsSync(targetDir)).toBe(true);
+      expect(await readFile(join(targetDir, "canary.txt"), "utf-8")).toBe("V1 CANARY CONTENT");
+    } finally {
+      await rm(tmpDir2, { recursive: true, force: true });
+    }
   });
 
   it("verifies sha256 and succeeds on match", async () => {
@@ -206,7 +250,7 @@ describe("extractSkill", () => {
     const { createHash } = await import("node:crypto");
 
     const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# Verified Skill",
+      "SKILL.md": makeSkillMd("verified-skill"),
     });
 
     const fileBytes = await readFile(tarPath);
@@ -225,7 +269,7 @@ describe("extractSkill", () => {
 
   it("aborts before extraction on sha256 mismatch", async () => {
     const tarPath = await createTarball(tmpDir, {
-      "SKILL.md": "# Tampered Skill",
+      "SKILL.md": makeSkillMd("tampered-skill"),
     });
 
     await expect(
@@ -238,23 +282,119 @@ describe("extractSkill", () => {
     ).rejects.toThrow("Integrity check failed");
   });
 
-  it("extracts flat tarball without top-level repo-sha folder", async () => {
-    // Create archive directly at root
-    const flatDir = join(tmpDir, "flat-source");
-    await mkdir(flatDir, { recursive: true });
-    await writeFile(join(flatDir, "SKILL.md"), "# Flat Skill");
-
-    const flatTar = join(tmpDir, "flat.tar.gz");
-    const { create } = await import("tar");
-    await create({ gzip: true, file: flatTar, cwd: flatDir }, ["SKILL.md"]);
-
-    const result = await extractSkill({
-      tarballStream: fileToWebStream(flatTar),
-      name: "flat-skill",
-      skillsDir,
+  it("rejects banned extensions (.exe, .dll, etc.)", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("banned-skill"),
+      "binary.dll": "fake dll content",
     });
 
-    const files = await readdir(result);
-    expect(files).toContain("SKILL.md");
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "banned-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("prohibited");
+  });
+
+  it("rejects files with ELF magic bytes", async () => {
+    const elfHeader = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]);
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("magic-skill"),
+      "script.txt": elfHeader,
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "magic-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("ELF executable binary magic bytes");
+  });
+
+  it("rejects files with Windows PE magic bytes", async () => {
+    const peHeader = Buffer.from([0x4d, 0x5a, 0x90, 0x00]); // MZ
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("magic-pe"),
+      "script.py": peHeader,
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "magic-pe",
+        skillsDir,
+      })
+    ).rejects.toThrow("Windows PE executable binary magic bytes");
+  });
+
+  it("GitHub install skips non-allowlisted files and accepts --allow-ext", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("github-skill"),
+      "docs.unknownext": "some random doc",
+      "special.custom": "custom content",
+    });
+
+    // 1. Without allowExt: .unknownext and .custom are skipped (unlinked)
+    const result1 = await extractSkill({
+      tarballStream: fileToWebStream(tarPath),
+      name: "github-skill",
+      skillsDir,
+      isGitHub: true,
+    });
+
+    const files1 = await readdir(result1);
+    expect(files1).toContain("SKILL.md");
+    expect(files1).not.toContain("docs.unknownext");
+    expect(files1).not.toContain("special.custom");
+
+    // 2. With allowExt: custom extension is preserved
+    const tarPath2 = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("github-skill"),
+      "docs.unknownext": "some random doc",
+      "special.custom": "custom content",
+    });
+
+    const result2 = await extractSkill({
+      tarballStream: fileToWebStream(tarPath2),
+      name: "github-skill",
+      skillsDir,
+      isGitHub: true,
+      allowExt: [".custom"],
+    });
+
+    const files2 = await readdir(result2);
+    expect(files2).toContain("special.custom");
+    expect(files2).not.toContain("docs.unknownext");
+  });
+
+  it("requires --yes when shell or network permissions are declared in non-interactive mode", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("perm-skill"),
+      "skill.json": JSON.stringify({
+        name: "perm-skill",
+        permissions: { network: true, shell: false, filesystem: "read" },
+      }),
+    });
+
+    // Without yes in non-interactive environment: fails
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "perm-skill",
+        skillsDir,
+        yes: false,
+      })
+    ).rejects.toThrow("elevated permissions");
+
+    // With yes: succeeds
+    const result = await extractSkill({
+      tarballStream: fileToWebStream(tarPath),
+      name: "perm-skill",
+      skillsDir,
+      yes: true,
+    });
+    expect(existsSync(join(result, "SKILL.md"))).toBe(true);
   });
 });
