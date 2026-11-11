@@ -154,4 +154,120 @@ describe("DependencyResolver", () => {
     expect(shared).toBeDefined();
     expect(shared?.version).toBe("1.2.5");
   });
+
+  it("resolves child dependencies after swapping to a common version", async () => {
+    const mockRegistry: Record<string, SkillDetail> = {
+      "root-app": makeDetail("root-app", {
+        "1.0.0": { dependencies: { "dep-a": "^1.0.0", "dep-b": "^1.0.0" } },
+      }),
+      "dep-a": makeDetail("dep-a", {
+        "1.0.0": { dependencies: { "shared-pkg": "1.0.0" } },
+      }),
+      "dep-b": makeDetail("dep-b", {
+        "1.0.0": { dependencies: { "shared-pkg": "^2.0.0" } }, // requires upgrading shared-pkg to 2.0.0
+      }),
+      "shared-pkg": makeDetail("shared-pkg", {
+        "1.0.0": { dependencies: {} },
+        "2.0.0": { dependencies: { "extra-dep": "^1.0.0" } }, // 2.0.0 introduces extra-dep!
+      }),
+      "extra-dep": makeDetail("extra-dep", {
+        "1.0.0": { dependencies: {} },
+      }),
+    };
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockImplementation(async (name) => {
+      const res = mockRegistry[name];
+      if (!res) throw new Error(`Not found: ${name}`);
+      return res;
+    });
+
+    const resolver = new DependencyResolver(client);
+    // If range conflict happens between 1.0.0 and ^2.0.0, it throws unless a common version exists:
+    // Let's test with shared-pkg versions 1.0.0 (no extra) and 1.5.0 (which has extra-dep)
+    const mockRegistry2: Record<string, SkillDetail> = {
+      "root-app": makeDetail("root-app", {
+        "1.0.0": { dependencies: { "dep-a": "^1.0.0", "dep-b": "^1.0.0" } },
+      }),
+      "dep-a": makeDetail("dep-a", {
+        "1.0.0": { dependencies: { "shared-pkg": "^1.0.0" } },
+      }),
+      "dep-b": makeDetail("dep-b", {
+        "1.0.0": { dependencies: { "shared-pkg": ">=1.5.0 <2.0.0" } },
+      }),
+      "shared-pkg": makeDetail("shared-pkg", {
+        "1.0.0": { dependencies: {} },
+        "1.5.0": { dependencies: { "extra-dep": "^1.0.0" } },
+      }),
+      "extra-dep": makeDetail("extra-dep", {
+        "1.0.0": { dependencies: {} },
+      }),
+    };
+
+    vi.spyOn(client, "getSkill").mockImplementation(async (name) => {
+      const res = mockRegistry2[name];
+      if (!res) throw new Error(`Not found: ${name}`);
+      return res;
+    });
+
+    const result = await resolver.resolve("root-app");
+    expect(result.packages.get("shared-pkg")?.version).toBe("1.5.0");
+    // Verify extra-dep from the swapped version 1.5.0 was resolved!
+    expect(result.packages.get("extra-dep")).toBeDefined();
+    expect(result.packages.get("extra-dep")?.version).toBe("1.0.0");
+  });
+
+  it("excludes removed versions from findCommonVersion", async () => {
+    const detail = makeDetail("shared-lib", {
+      "1.0.0": { dependencies: {} },
+      "1.5.0": { dependencies: {} },
+    });
+    // Mark 1.5.0 as removed
+    detail.versions["1.5.0"].status = "removed";
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockResolvedValue(detail);
+
+    const resolver = new DependencyResolver(client);
+    // When range allows 1.5.0, it should not pick removed 1.5.0
+    const result = await resolver.resolve("shared-lib", "^1.0.0");
+    expect(result.packages.get("shared-lib")?.version).toBe("1.0.0");
+  });
+
+  it("treats range 'latest' as '*' everywhere", async () => {
+    const detail = makeDetail("any-lib", {
+      "1.0.0": { dependencies: {} },
+      "2.3.4": { dependencies: {} },
+    });
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockResolvedValue(detail);
+
+    const resolver = new DependencyResolver(client);
+    const result = await resolver.resolve("any-lib", "latest");
+    expect(result.packages.get("any-lib")?.version).toBe("2.3.4");
+  });
+
+  it("enforces max depth limit of 10 levels", async () => {
+    const mockRegistry: Record<string, SkillDetail> = {};
+    for (let i = 1; i <= 12; i++) {
+      mockRegistry[`node-${i}`] = makeDetail(`node-${i}`, {
+        "1.0.0": {
+          dependencies: i < 12 ? { [`node-${i + 1}`]: "1.0.0" } : {},
+        },
+      });
+    }
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockImplementation(async (name) => {
+      const res = mockRegistry[name];
+      if (!res) throw new Error(`Not found: ${name}`);
+      return res;
+    });
+
+    const resolver = new DependencyResolver(client);
+    await expect(resolver.resolve("node-1")).rejects.toThrow(
+      "Dependency resolution exceeded maximum depth limit of 10 levels."
+    );
+  });
 });

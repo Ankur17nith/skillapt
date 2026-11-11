@@ -34,6 +34,7 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
 
   const client = new RegistryClient();
   const outdatedList: OutdatedItem[] = [];
+  const unreachable: Array<{ name: string; error: string }> = [];
 
   for (const name of installedNames) {
     const entry = manifest.skills[name];
@@ -59,8 +60,11 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
             source: entry.source,
           });
         }
-      } catch {
-        // Ignore resolution error in outdated
+      } catch (err: unknown) {
+        unreachable.push({
+          name,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     } else {
       const currentVersion = lockEntry?.version ?? "0.0.0";
@@ -84,10 +88,17 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
             source: "registry",
           });
         }
-      } catch {
-        // Skip unresolvable skills
+      } catch (err: unknown) {
+        unreachable.push({
+          name,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
+  }
+
+  if (unreachable.length > 0) {
+    process.exitCode = 1;
   }
 
   if (options.json) {
@@ -95,8 +106,17 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
     return;
   }
 
+  if (unreachable.length > 0) {
+    console.log(pc.yellow(`\nCould not check ${unreachable.length} skill(s):`));
+    for (const u of unreachable) {
+      console.log(`  • ${pc.bold(u.name)}: ${pc.red(u.error)}`);
+    }
+  }
+
   if (outdatedList.length === 0) {
-    console.log(pc.green("All installed skills are up to date."));
+    if (unreachable.length === 0) {
+      console.log(pc.green("All installed skills are up to date."));
+    }
     return;
   }
 

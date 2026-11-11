@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import semver from "semver";
 import { existsSync } from "node:fs";
 import {
   parseSource,
@@ -274,18 +275,50 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
   const skillsDir = getSkillsDir();
 
   // If frozen, enforce complete lockfile sync
-  if (options.frozen) {
-    const sync = checkLockfileSync(manifest, lockfile);
-    if (!sync.inSync) {
-      throw new Error(
-        `skills.lock.json is out of sync with skills.json. Missing: ${sync.missing.join(", ")}. Aborting frozen install.`
-      );
+  const sync = checkLockfileSync(manifest, lockfile);
+  if (options.frozen && !sync.inSync) {
+    throw new Error(
+      `skills.lock.json is out of sync with skills.json. Missing: ${sync.missing.join(", ")}. Aborting frozen install.`
+    );
+  }
+
+  // Validate locked entries and enforce frozen requirements
+  for (const [name, entry] of Object.entries(lockfile.skills)) {
+    if (!isValidRegistryName(name)) {
+      throw new Error(`Invalid skill name in lockfile: "${name}"`);
+    }
+
+    const isReg = entry.source === "registry" || (!entry.source.includes("/") && entry.version);
+    if (isReg) {
+      if (!entry.version) {
+        throw new Error(`Lockfile entry for "${name}" is missing version.`);
+      }
+      if (!entry.sha256) {
+        throw new Error(`Lockfile entry for "${name}" is missing sha256 checksum.`);
+      }
+      // In frozen mode, locked version must satisfy manifest range
+      if (options.frozen && manifest.skills[name]?.version) {
+        const range = manifest.skills[name].version!;
+        const normalizedRange = range === "latest" ? "*" : range;
+        if (!semver.satisfies(entry.version, normalizedRange)) {
+          throw new Error(
+            `Locked version "${entry.version}" for "${name}" does not satisfy manifest range "${range}". Aborting frozen install.`
+          );
+        }
+      }
+    } else {
+      if (!isValidGitHubSource(entry.source)) {
+        throw new Error(`Invalid GitHub source in lockfile: "${entry.source}"`);
+      }
+      if (!entry.sha) {
+        throw new Error(`Lockfile entry for "${name}" is missing commit sha.`);
+      }
     }
   }
 
   const lockedSkills = Object.entries(lockfile.skills);
 
-  // If lockfile has skills, install strictly from lockfile (never calling resolve endpoint)
+  // Install skills from lockfile
   if (lockedSkills.length > 0) {
     console.log(
       `Installing ${pc.bold(String(lockedSkills.length))} skill(s) from ${pc.cyan("skills.lock.json")}${options.frozen ? " (frozen)" : ""}...\n`
@@ -294,22 +327,12 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
     const client = new RegistryClient();
 
     for (const [name, entry] of lockedSkills) {
-      if (!isValidRegistryName(name)) {
-        throw new Error(`Invalid skill name in lockfile: "${name}"`);
-      }
       assertInside(skillsDir, toOnDiskName(name));
 
-      if (entry.source === "registry" || (!entry.source.includes("/") && entry.version)) {
-        // Registry skill from lockfile: DO NOT call resolve endpoint!
-        if (!entry.version) {
-          throw new Error(`Lockfile entry for "${name}" is missing version.`);
-        }
-        if (!entry.sha256) {
-          throw new Error(`Lockfile entry for "${name}" is missing sha256 checksum.`);
-        }
-
+      const isReg = entry.source === "registry" || (!entry.source.includes("/") && entry.version);
+      if (isReg) {
         console.log(`→ ${pc.bold(name)} ${pc.dim(`(v${entry.version})`)} [locked]`);
-        const { stream } = await client.downloadTarball(name, entry.version);
+        const { stream } = await client.downloadTarball(name, entry.version!);
 
         await extractSkill({
           tarballStream: stream,
@@ -319,10 +342,6 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
           yes: options.yes,
         });
       } else {
-        // GitHub skill from lockfile
-        if (!isValidGitHubSource(entry.source)) {
-          throw new Error(`Invalid GitHub source in lockfile: "${entry.source}"`);
-        }
         const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
         console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr})`)} [locked]`);
 
@@ -343,41 +362,57 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
         });
       }
     }
-
-    console.log(`\n${pc.green("✓")} All skills installed successfully from lockfile.`);
-    await syncTargets(lockedSkills.map(([name]) => name), options);
-    return;
   }
 
-  // Fallback if lockfile is empty: install from skills.json and generate lockfile
-  const manifestSkills = Object.entries(manifest.skills);
-  if (manifestSkills.length === 0) {
-    console.log(pc.yellow("No skills listed in skills.json. Nothing to install."));
-    return;
-  }
+  // Install any manifest entries missing from the lockfile (unless --frozen)
+  const missingManifestSkills = Object.entries(manifest.skills).filter(
+    ([name]) => !lockfile.skills[name]
+  );
 
-  console.log(`Installing ${pc.bold(String(manifestSkills.length))} skill(s) from skills.json...\n`);
-
-  for (const [name, entry] of manifestSkills) {
-    if (!isValidRegistryName(name)) {
-      throw new Error(`Invalid skill name in manifest: "${name}"`);
+  if (missingManifestSkills.length > 0) {
+    if (options.frozen) {
+      throw new Error(
+        `skills.lock.json is missing manifest skills: ${missingManifestSkills.map(([n]) => n).join(", ")}. Aborting frozen install.`
+      );
     }
-    assertInside(skillsDir, toOnDiskName(name));
-    const isGitHub = entry.source.includes("/") && !entry.source.startsWith("@");
-    if (isGitHub) {
-      if (!isValidGitHubSource(entry.source)) {
-        throw new Error(`Invalid GitHub source in manifest: "${entry.source}"`);
+
+    console.log(
+      `\nInstalling ${pc.bold(String(missingManifestSkills.length))} missing skill(s) from skills.json...\n`
+    );
+
+    for (const [name, entry] of missingManifestSkills) {
+      if (!isValidRegistryName(name)) {
+        throw new Error(`Invalid skill name in manifest: "${name}"`);
       }
-      const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
-      const refStr = entry.ref ? `@${entry.ref}` : "";
-      console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr}${refStr})`)}`);
-      await installSingle(`${sourceStr}${refStr}`, options);
-    } else {
-      const verStr = entry.version ? `@${entry.version}` : "";
-      console.log(`→ ${pc.bold(name)} ${pc.dim(`(${entry.source || name}${verStr})`)}`);
-      await installSingle(`${name}${verStr}`, options);
+      assertInside(skillsDir, toOnDiskName(name));
+      const isGitHub = entry.source.includes("/") && !entry.source.startsWith("@");
+      if (isGitHub) {
+        if (!isValidGitHubSource(entry.source)) {
+          throw new Error(`Invalid GitHub source in manifest: "${entry.source}"`);
+        }
+        const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
+        const refStr = entry.ref ? `@${entry.ref}` : "";
+        console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr}${refStr})`)}`);
+        await installSingle(`${sourceStr}${refStr}`, options);
+      } else {
+        const verStr = entry.version ? `@${entry.version}` : "";
+        console.log(`→ ${pc.bold(name)} ${pc.dim(`(${entry.source || name}${verStr})`)}`);
+        await installSingle(`${name}${verStr}`, options);
+      }
     }
   }
+
+  if (lockedSkills.length === 0 && missingManifestSkills.length === 0) {
+    console.log(pc.yellow("No skills listed in skills.json or skills.lock.json. Nothing to install."));
+    return;
+  }
+
+  // Sync targets for all installed skills honoring --target and --global
+  const allInstalledSkills = Array.from(
+    new Set([...lockedSkills.map(([name]) => name), ...Object.keys(manifest.skills)])
+  );
+  await syncTargets(allInstalledSkills, options);
+  console.log(`\n${pc.green("✓")} All skills installed successfully.`);
 }
 
 async function readSkillName(dir: string): Promise<string | null> {

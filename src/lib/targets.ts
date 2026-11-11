@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { resolve, join } from "node:path";
-import { symlink, cp, mkdir, rm, readFile } from "node:fs/promises";
+import { symlink, cp, mkdir, rm, readFile, lstat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import pc from "picocolors";
 import { assertInside } from "./fs.js";
@@ -178,4 +178,62 @@ export async function syncSkillToTarget(
     await cp(absoluteSource, targetPath, { recursive: true });
     return { target: targetKey, targetPath, mode: "copy" };
   }
+}
+
+/**
+ * Remove an installed skill and its symlink/copy from all known agent targets.
+ */
+export async function removeSkillFromTargets(
+  skillName: string,
+  projectRoot: string = "."
+): Promise<string[]> {
+  const onDiskName = toOnDiskName(skillName);
+  const removed: string[] = [];
+
+  for (const targetKey of Object.keys(TARGET_CONFIGS)) {
+    for (const isGlobal of [false, true]) {
+      try {
+        const baseDir = resolveTargetDir(targetKey, isGlobal, projectRoot);
+        const targetPath = join(baseDir, onDiskName);
+        try {
+          await lstat(targetPath);
+          await rm(targetPath, { recursive: true, force: true });
+          removed.push(targetPath);
+        } catch {
+          // not found
+        }
+      } catch {
+        // target directory resolution error
+      }
+    }
+  }
+
+  return removed;
+}
+
+/**
+ * Detect all targets where a skill is currently installed/synced.
+ */
+export async function getExistingTargetsForSkill(
+  skillName: string,
+  projectRoot: string = "."
+): Promise<Array<{ target: string; global: boolean }>> {
+  const onDiskName = toOnDiskName(skillName);
+  const found: Array<{ target: string; global: boolean }> = [];
+
+  for (const targetKey of Object.keys(TARGET_CONFIGS)) {
+    for (const isGlobal of [false, true]) {
+      try {
+        const baseDir = resolveTargetDir(targetKey, isGlobal, projectRoot);
+        const targetPath = join(baseDir, onDiskName);
+        if (existsSync(targetPath)) {
+          found.push({ target: targetKey, global: isGlobal });
+        }
+      } catch {
+        // target directory resolution error
+      }
+    }
+  }
+
+  return found;
 }

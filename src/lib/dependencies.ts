@@ -50,7 +50,8 @@ export class DependencyResolver {
       "root",
       packages,
       constraints,
-      currentStack
+      currentStack,
+      1
     );
 
     // Compute deterministic topological sort (dependencies before dependents)
@@ -71,8 +72,15 @@ export class DependencyResolver {
     requestedBy: string,
     packages: Map<string, ResolvedPackage>,
     constraints: Map<string, PackageRequirement[]>,
-    currentStack: string[]
+    currentStack: string[],
+    depth: number = 1
   ): Promise<void> {
+    if (depth > 10) {
+      throw new Error(`Dependency resolution exceeded maximum depth limit of 10 levels.`);
+    }
+
+    const normalizedRange = requestedRange === "latest" ? "*" : requestedRange;
+
     // 1. Cycle Detection
     if (currentStack.includes(name)) {
       const cyclePath = [...currentStack, name].join(" -> ");
@@ -81,14 +89,14 @@ export class DependencyResolver {
 
     // 2. Track range requirement
     const existingReqs = constraints.get(name) ?? [];
-    existingReqs.push({ from: requestedBy, range: requestedRange });
+    existingReqs.push({ from: requestedBy, range: normalizedRange });
     constraints.set(name, existingReqs);
 
     // 3. Check if already resolved in this tree
     const alreadyResolved = packages.get(name);
     if (alreadyResolved) {
       // Verify that the already-resolved version satisfies the new range
-      if (!semver.satisfies(alreadyResolved.version, requestedRange)) {
+      if (!semver.satisfies(alreadyResolved.version, normalizedRange)) {
         // Try to re-resolve a version that satisfies ALL constraints
         const skillDetail = await this.getSkillDetail(name);
         const allRanges = constraints.get(name) || [];
@@ -107,13 +115,33 @@ export class DependencyResolver {
         alreadyResolved.sha256 = commonVersion.sha256;
         alreadyResolved.tarballUrl = commonVersion.tarballUrl;
         alreadyResolved.dependencies = commonVersion.dependencies ?? {};
+        alreadyResolved.dependenciesResolved = Object.keys(commonVersion.dependencies ?? {});
+
+        // Resolve dependencies of the swapped version too
+        currentStack.push(name);
+        try {
+          const childDeps = Object.entries(alreadyResolved.dependencies);
+          for (const [depName, depRange] of childDeps) {
+            await this.resolveNode(
+              depName,
+              depRange,
+              name,
+              packages,
+              constraints,
+              currentStack,
+              depth + 1
+            );
+          }
+        } finally {
+          currentStack.pop();
+        }
       }
       return;
     }
 
     // 4. Fetch detail and resolve best version
     const skillDetail = await this.getSkillDetail(name);
-    const versionSummary = resolveSkillVersion(skillDetail, requestedRange);
+    const versionSummary = resolveSkillVersion(skillDetail, normalizedRange);
 
     const resolvedPkg: ResolvedPackage = {
       name,
@@ -137,7 +165,8 @@ export class DependencyResolver {
           name,
           packages,
           constraints,
-          currentStack
+          currentStack,
+          depth + 1
         );
       }
     } finally {
@@ -160,7 +189,7 @@ export class DependencyResolver {
     requirements: PackageRequirement[]
   ): SkillVersionSummary | null {
     const versions = Object.keys(skill.versions || {}).filter(
-      (v) => !skill.versions[v]?.yanked
+      (v) => !skill.versions[v]?.yanked && skill.versions[v]?.status !== "removed"
     );
 
     // Filter versions that satisfy ALL requirements

@@ -124,6 +124,8 @@ program
   .command("update [name]")
   .description("Update installed skills to their latest compatible versions")
   .option("--json", "output in JSON format")
+  .option("--target <target>", "sync updated skills to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)")
+  .option("-g, --global", "install target skills globally to user home directory")
   .action(
     wrap(async (name?: string, opts?: UpdateOptions) => {
       await updateCommand(name, opts);
