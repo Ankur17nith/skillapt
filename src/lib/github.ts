@@ -1,5 +1,10 @@
-const API_BASE = "https://api.github.com";
-const CODELOAD_BASE = "https://codeload.github.com";
+function getApiBase(): string {
+  return process.env.SKILLAPT_GITHUB_API_BASE || "https://api.github.com";
+}
+
+function getCodeloadBase(): string {
+  return process.env.SKILLAPT_GITHUB_CODELOAD_BASE || "https://codeload.github.com";
+}
 
 function authHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN;
@@ -19,7 +24,7 @@ export async function resolveRef(
   ref?: string | null
 ): Promise<string> {
   const commitRef = ref ?? "HEAD";
-  const url = `${API_BASE}/repos/${owner}/${repo}/commits/${encodeURIComponent(commitRef)}`;
+  const url = `${getApiBase()}/repos/${owner}/${repo}/commits/${encodeURIComponent(commitRef)}`;
 
   const res = await fetch(url, {
     headers: {
@@ -65,7 +70,7 @@ export async function downloadTarball(
   repo: string,
   sha: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const url = `${CODELOAD_BASE}/${owner}/${repo}/tar.gz/${sha}`;
+  const url = `${getCodeloadBase()}/${owner}/${repo}/tar.gz/${sha}`;
 
   const res = await fetch(url, {
     headers: {
