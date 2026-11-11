@@ -116,9 +116,17 @@ skillapt install pdf-summarizer --target cursor
 # Sync to Codex (.codex/skills)
 skillapt install pdf-summarizer --target codex
 
-# Sync to user's global home directory (~/.claude/skills)
-skillapt install pdf-summarizer --target claude --global
+# Sync to Antigravity (.agents/skills, global ~/.gemini/config/skills)
+skillapt install pdf-summarizer --target antigravity
+
+# Sync to Antigravity CLI (.agents/skills, global ~/.gemini/antigravity-cli/skills)
+skillapt install pdf-summarizer --target antigravity-cli
+
+# Sync to user's global home directory (~/.gemini/config/skills)
+skillapt install pdf-summarizer --target antigravity --global
 ```
+
+Legacy Antigravity paths (`.agent/skills` and `~/.gemini/antigravity/skills`) are automatically detected if present when the new paths do not exist. You can also override the Antigravity target directory using the `SKILLAPT_ANTIGRAVITY_DIR` environment variable.
 
 #### Deterministic & CI Installs (`--frozen`)
 ```bash

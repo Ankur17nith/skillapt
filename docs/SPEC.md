@@ -432,6 +432,7 @@ The official `skillapt` CLI and third-party tools must conform to these security
 2. **Integrity Enforcement**: Verify `SHA-256(downloaded_tarball) === lockfile.integrity` before expanding any archive.
 3. **Flat Directory Resolution**: Place installed skills into `.skills/<skill-name>` without nested subdirectories.
 4. **Frontmatter Verification**: Verify that installed `SKILL.md` contains valid YAML frontmatter matching the package name.
+5. **Target Synchronization**: The CLI supports syncing skills to agent directories (`claude`, `cursor`, `codex`, `antigravity`, `antigravity-cli`). For `antigravity`, project path is `.agents/skills` and global is `~/.gemini/config/skills`. For `antigravity-cli`, project path is `.agents/skills` and global is `~/.gemini/antigravity-cli/skills`. Legacy paths (`.agent/skills`, `~/.gemini/antigravity/skills`) are detected when new paths do not exist. Overrides are supported via `SKILLAPT_ANTIGRAVITY_DIR`.
 
 ---
 

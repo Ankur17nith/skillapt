@@ -36,7 +36,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         description: "An AI agent skill package",
         license: "MIT",
         category: "documents",
-        compatibility: ["claude", "cursor", "codex"],
+        compatibility: ["claude", "cursor", "codex", "antigravity"],
         permissions: {
           network: false,
           shell: false,

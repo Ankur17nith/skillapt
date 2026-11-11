@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { resolve, join } from "node:path";
 import { symlink, cp, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import pc from "picocolors";
 import { assertInside } from "./fs.js";
 
 export interface TargetDefinition {
@@ -33,6 +34,18 @@ export const TARGET_CONFIGS: Record<string, TargetDefinition> = {
     globalDir: join(homedir(), ".codex", "skills"),
     description: "OpenAI Codex agent skills directory",
   },
+  antigravity: {
+    name: "antigravity",
+    projectDir: ".agents/skills",
+    globalDir: join(homedir(), ".gemini", "config", "skills"),
+    description: "Google Antigravity agent skills directory",
+  },
+  "antigravity-cli": {
+    name: "antigravity-cli",
+    projectDir: ".agents/skills",
+    globalDir: join(homedir(), ".gemini", "antigravity-cli", "skills"),
+    description: "Google Antigravity CLI skills directory",
+  },
 };
 
 export interface SyncTargetOptions {
@@ -41,12 +54,69 @@ export interface SyncTargetOptions {
   target: string;
   global?: boolean;
   projectRoot?: string;
+  homedir?: string;
 }
 
 export interface SyncTargetResult {
   target: string;
   targetPath: string;
   mode: "symlink" | "copy";
+}
+
+/**
+ * Resolve target base directory for a given target, taking into account
+ * --global, legacy directory detection, and SKILLAPT_ANTIGRAVITY_DIR override.
+ */
+export function resolveTargetDir(
+  targetKey: string,
+  isGlobal?: boolean,
+  projectRoot?: string,
+  homeDir: string = homedir()
+): string {
+  const def = TARGET_CONFIGS[targetKey];
+  if (!def) {
+    const valid = Object.keys(TARGET_CONFIGS).join(", ");
+    throw new Error(
+      `Unknown install target "${targetKey}". Supported targets: ${valid}`
+    );
+  }
+
+  if (targetKey === "antigravity" || targetKey === "antigravity-cli") {
+    if (process.env.SKILLAPT_ANTIGRAVITY_DIR) {
+      return resolve(process.env.SKILLAPT_ANTIGRAVITY_DIR);
+    }
+
+    if (isGlobal) {
+      if (targetKey === "antigravity") {
+        const legacyGlobal = join(homeDir, ".gemini", "antigravity", "skills");
+        const newGlobal = join(homeDir, ".gemini", "config", "skills");
+        if (existsSync(legacyGlobal) && !existsSync(newGlobal)) {
+          console.log(pc.yellow(`Notice: Using legacy Antigravity directory: ${legacyGlobal}`));
+          return legacyGlobal;
+        }
+        return newGlobal;
+      }
+      return join(homeDir, ".gemini", "antigravity-cli", "skills");
+    } else {
+      const root = projectRoot ?? ".";
+      const legacyProject = resolve(root, ".agent", "skills");
+      const newProject = resolve(root, def.projectDir);
+      if (existsSync(legacyProject) && !existsSync(newProject)) {
+        console.log(pc.yellow(`Notice: Using legacy Antigravity directory: ${legacyProject}`));
+        return legacyProject;
+      }
+      return newProject;
+    }
+  }
+
+  if (isGlobal) {
+    if (targetKey === "claude") return join(homeDir, ".claude", "skills");
+    if (targetKey === "cursor") return join(homeDir, ".cursor", "skills");
+    if (targetKey === "codex") return join(homeDir, ".codex", "skills");
+    return def.globalDir;
+  }
+
+  return resolve(projectRoot ?? ".", def.projectDir);
 }
 
 /**
@@ -65,18 +135,14 @@ export async function syncSkillToTarget(
     );
   }
 
-  const baseDir = options.global
-    ? def.globalDir
-    : resolve(options.projectRoot ?? ".", def.projectDir);
+  const baseDir = resolveTargetDir(targetKey, options.global, options.projectRoot, options.homedir);
 
   await mkdir(baseDir, { recursive: true });
 
   assertInside(baseDir, options.skillName);
   const targetPath = assertInside(baseDir, join(baseDir, options.skillName));
 
-  if (existsSync(targetPath)) {
-    await rm(targetPath, { recursive: true, force: true });
-  }
+  await rm(targetPath, { recursive: true, force: true });
 
   const absoluteSource = resolve(options.sourceDir);
 

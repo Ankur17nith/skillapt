@@ -56,7 +56,7 @@ program
   .command("install [source]")
   .description("Install a skill from the registry or GitHub, or install all from skills.json")
   .option("--frozen", "fail if skills.lock.json is missing or out of sync (for CI)")
-  .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex)")
+  .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)")
   .option("-g, --global", "install target skills globally to user home directory")
   .option("-y, --yes", "automatically confirm permissions prompts")
   .option("--allow-ext <extensions>", "additional allowed file extensions for GitHub installs (comma-separated)")
