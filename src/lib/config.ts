@@ -15,7 +15,7 @@ export const DEFAULT_REGISTRY_URL = "https://registry.skillapt.dev/v1";
  * Get the skills directory (supports SKILLAPT_DIR or --dir flag via env var).
  */
 export function getSkillsDir(): string {
-  return process.env.SKILLAPT_DIR ?? process.env.SKILLPM_DIR ?? ".skills";
+  return process.env.SKILLAPT_DIR ?? ".skills";
 }
 
 /**

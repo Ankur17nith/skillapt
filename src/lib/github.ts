@@ -24,7 +24,7 @@ export async function resolveRef(
   const res = await fetch(url, {
     headers: {
       Accept: "application/vnd.github.v3.sha",
-      "User-Agent": "skillpm",
+      "User-Agent": "skillapt",
       ...authHeaders(),
     },
   });
@@ -69,7 +69,7 @@ export async function downloadTarball(
 
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "skillpm",
+      "User-Agent": "skillapt",
       ...authHeaders(),
     },
   });

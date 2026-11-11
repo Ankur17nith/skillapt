@@ -33,7 +33,6 @@ program
     debugMode = !!opts.debug;
     if (opts.dir) {
       process.env.SKILLAPT_DIR = opts.dir;
-      process.env.SKILLPM_DIR = opts.dir;
     }
   });
 

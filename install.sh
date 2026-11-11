@@ -23,24 +23,52 @@ fi
 
 echo "✓ Node.js $(node -v) detected"
 
-# Check npm or install destination
-if command -v npm >/dev/null 2>&1; then
-  echo "Installing ${PRODUCT_NAME} via npm..."
-  npm install -g "${PRODUCT_NAME}" || npm install -g "https://github.com/${REPO}.git"
-else
-  # Direct install fallback into ~/.local/bin
-  INSTALL_DIR="${HOME}/.local/bin"
-  mkdir -p "${INSTALL_DIR}"
-  echo "Fetching pre-built CLI bundle to ${INSTALL_DIR}..."
-  curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/dist/cli.js" -o "${INSTALL_DIR}/${PRODUCT_NAME}"
-  chmod +x "${INSTALL_DIR}/${PRODUCT_NAME}"
-  echo "✓ Installed ${PRODUCT_NAME} to ${INSTALL_DIR}/${PRODUCT_NAME}"
-  echo "Make sure ${INSTALL_DIR} is in your PATH."
+# Check npm
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is required to install ${PRODUCT_NAME}." >&2
+  echo "Please install npm (packaged with Node.js from https://nodejs.org) and try again." >&2
+  exit 1
 fi
 
-echo ""
-echo "=== ${PRODUCT_NAME} installed successfully! ==="
-if command -v "${PRODUCT_NAME}" >/dev/null 2>&1; then
-  "${PRODUCT_NAME}" --version
+echo "Installing ${PRODUCT_NAME} via npm..."
+
+# Attempt npm install -g and capture output to handle EACCES
+INSTALL_LOG=$(mktemp)
+if ! npm install -g "${PRODUCT_NAME}" >"${INSTALL_LOG}" 2>&1 && ! npm install -g "https://github.com/${REPO}.git" >"${INSTALL_LOG}" 2>&1; then
+  cat "${INSTALL_LOG}" >&2
+  if grep -qi "EACCES" "${INSTALL_LOG}"; then
+    echo "" >&2
+    echo "Error: npm encountered an EACCES permissions error during global installation." >&2
+    echo "Do NOT use 'sudo npm install'." >&2
+    echo "To fix npm permissions without sudo, configure an npm prefix in your home directory:" >&2
+    echo "  mkdir -p \"\${HOME}/.npm-global\"" >&2
+    echo "  npm config set prefix \"\${HOME}/.npm-global\"" >&2
+    echo "  export PATH=\"\${HOME}/.npm-global/bin:\${PATH}\"" >&2
+    echo "Add that export to your ~/.bashrc or ~/.zshrc, then re-run this installer." >&2
+  else
+    echo "" >&2
+    echo "Error: Failed to install ${PRODUCT_NAME} via npm. See output above for details." >&2
+  fi
+  rm -f "${INSTALL_LOG}"
+  exit 1
 fi
+rm -f "${INSTALL_LOG}"
+
+# Verify installation
+if ! command -v "${PRODUCT_NAME}" >/dev/null 2>&1; then
+  echo "Error: '${PRODUCT_NAME}' was installed, but the command was not found in your PATH." >&2
+  echo "Ensure your global npm bin directory is in your PATH." >&2
+  echo "You can check your npm global bin path by running: npm prefix -g" >&2
+  exit 1
+fi
+
+if ! "${PRODUCT_NAME}" --version >/dev/null 2>&1; then
+  echo "Error: '${PRODUCT_NAME}' command was found, but '${PRODUCT_NAME} --version' failed to run." >&2
+  exit 1
+fi
+
+INSTALLED_VER=$("${PRODUCT_NAME}" --version)
+
+echo ""
+echo "=== ${PRODUCT_NAME} v${INSTALLED_VER} installed successfully! ==="
 echo "Run '${PRODUCT_NAME} --help' or '${PRODUCT_NAME} doctor' to get started."

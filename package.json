@@ -4,8 +4,7 @@
   "description": "Package manager and CLI for AI agent skills",
   "type": "module",
   "bin": {
-    "skillapt": "dist/cli.js",
-    "skillpm": "dist/cli.js"
+    "skillapt": "dist/cli.js"
   },
   "engines": {
     "node": ">=20"
@@ -13,6 +12,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -52,7 +53,6 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/semver": "^7.8.0",
-    "@types/tar": "^6.1.13",
     "tsup": "^9.0.0",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"

@@ -17,7 +17,7 @@ export function getVersion(): string {
           name?: string;
           version?: string;
         };
-        if ((pkg.name === PRODUCT_NAME || pkg.name === "skillpm" || pkg.name === "skillapt") && pkg.version) {
+        if ((pkg.name === PRODUCT_NAME || pkg.name === "skillapt") && pkg.version) {
           return pkg.version;
         }
       } catch {
