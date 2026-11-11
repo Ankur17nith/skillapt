@@ -38,6 +38,18 @@ export function isValidRegistryName(name: string): boolean {
 }
 
 /**
+ * Regex for GitHub repository sources: owner/repo format.
+ */
+export const GITHUB_SOURCE_REGEX = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
+/**
+ * Checks if a string is a valid GitHub repository source (owner/repo).
+ */
+export function isValidGitHubSource(source: string): boolean {
+  return GITHUB_SOURCE_REGEX.test(source);
+}
+
+/**
  * Type guard for GitHubSource
  */
 export function isGitHubSource(source: SkillSource): source is GitHubSource {

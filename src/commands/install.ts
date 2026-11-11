@@ -1,6 +1,14 @@
 import pc from "picocolors";
 import { existsSync } from "node:fs";
-import { parseSource, type SkillSource, type GitHubSource, type RegistrySource } from "../lib/source.js";
+import {
+  parseSource,
+  type SkillSource,
+  type GitHubSource,
+  type RegistrySource,
+  isValidRegistryName,
+  isValidGitHubSource,
+  REGISTRY_NAME_REGEX,
+} from "../lib/source.js";
 import { resolveRef, downloadTarball } from "../lib/github.js";
 import { extractSkill } from "../lib/extract.js";
 import { readManifest, writeManifest, addSkill } from "../lib/manifest.js";
@@ -15,7 +23,7 @@ import {
 import { getSkillsDir } from "../lib/config.js";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { moveDir } from "../lib/fs.js";
+import { moveDir, assertInside } from "../lib/fs.js";
 import { getBanner } from "../lib/banner.js";
 import { RegistryClient } from "../lib/registry.js";
 import { DependencyResolver } from "../lib/dependencies.js";
@@ -87,11 +95,14 @@ async function installGitHub(
   });
 
   // Try to read a name from skill.json
-  const name = await readSkillName(installDir) ?? defaultName;
+  const name = (await readSkillName(installDir)) ?? defaultName;
+  if (!isValidRegistryName(name)) {
+    throw new Error(`Invalid skill name "${name}".`);
+  }
 
   // If skill.json provided a different name, rename the directory
   if (name !== defaultName) {
-    const newDir = join(skillsDir, name);
+    const newDir = assertInside(skillsDir, name);
     await rm(newDir, { recursive: true, force: true });
     await moveDir(installDir, newDir);
   }
@@ -238,6 +249,11 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
     const client = new RegistryClient();
 
     for (const [name, entry] of lockedSkills) {
+      if (!isValidRegistryName(name)) {
+        throw new Error(`Invalid skill name in lockfile: "${name}"`);
+      }
+      assertInside(skillsDir, name);
+
       if (entry.source === "registry" || (!entry.source.includes("/") && entry.version)) {
         // Registry skill from lockfile: DO NOT call resolve endpoint!
         if (!entry.version) {
@@ -258,6 +274,9 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
         });
       } else {
         // GitHub skill from lockfile
+        if (!isValidGitHubSource(entry.source)) {
+          throw new Error(`Invalid GitHub source in lockfile: "${entry.source}"`);
+        }
         const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
         console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr})`)} [locked]`);
 
@@ -291,8 +310,15 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
   console.log(`Installing ${pc.bold(String(manifestSkills.length))} skill(s) from skills.json...\n`);
 
   for (const [name, entry] of manifestSkills) {
+    if (!isValidRegistryName(name)) {
+      throw new Error(`Invalid skill name in manifest: "${name}"`);
+    }
+    assertInside(skillsDir, name);
     const isGitHub = entry.source.includes("/") && !entry.source.startsWith("@");
     if (isGitHub) {
+      if (!isValidGitHubSource(entry.source)) {
+        throw new Error(`Invalid GitHub source in manifest: "${entry.source}"`);
+      }
       const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
       const refStr = entry.ref ? `@${entry.ref}` : "";
       console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr}${refStr})`)}`);
@@ -310,10 +336,19 @@ async function readSkillName(dir: string): Promise<string | null> {
     const raw = await readFile(join(dir, "skill.json"), "utf-8");
     const json = JSON.parse(raw) as { name?: string };
     if (typeof json.name === "string" && json.name.trim()) {
-      return json.name.trim();
+      const trimmed = json.name.trim();
+      if (!REGISTRY_NAME_REGEX.test(trimmed)) {
+        throw new Error(
+          `Invalid skill name in skill.json: "${trimmed}". Must match registry name regex.`
+        );
+      }
+      return trimmed;
     }
-  } catch {
-    // No skill.json or invalid — that's fine
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith("Invalid skill name in skill.json")) {
+      throw err;
+    }
+    // No skill.json or invalid JSON — that's fine
   }
   return null;
 }

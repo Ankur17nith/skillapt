@@ -3,7 +3,7 @@ import { mkdtemp, rm, readdir, stat, access, mkdir, writeFile } from "node:fs/pr
 import { join, resolve, normalize, isAbsolute, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { moveDir } from "./fs.js";
+import { moveDir, assertInside } from "./fs.js";
 
 // ── Security Limits from SPEC.md ──
 
@@ -94,7 +94,7 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
   }
 
   // Setup directories
-  const targetDir = resolveTargetDir(skillsDir, name);
+  const targetDir = assertInside(skillsDir, name);
   const tmpDir = await mkdtemp(join(tmpdir(), "skillapt-extract-"));
   const extractDir = join(tmpDir, "contents");
 
@@ -191,19 +191,7 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
 
     // Step 4: If subpath specified, use only that subfolder
     if (subpath) {
-      const subDir = join(sourceDir, subpath);
-      const resolvedSub = resolve(subDir);
-      const resolvedSource = resolve(sourceDir);
-
-      // SECURITY: Correct prefix check with directory boundary
-      if (
-        resolvedSub !== resolvedSource &&
-        !resolvedSub.startsWith(resolvedSource + sep)
-      ) {
-        throw new Error(
-          `Security: subpath "${subpath}" would escape the extraction directory.`
-        );
-      }
+      const subDir = assertInside(sourceDir, subpath);
 
       try {
         await access(subDir);
@@ -259,20 +247,4 @@ function validateSkillTargetName(name: string): void {
   if (parts.some((p) => !p || p === "." || p === "..")) {
     throw new Error(`Invalid skill name: "${name}"`);
   }
-}
-
-/**
- * Resolve target destination path, ensuring it stays inside skillsDir.
- */
-function resolveTargetDir(skillsDir: string, name: string): string {
-  const targetDir = resolve(skillsDir, name);
-  const resolvedSkillsDir = resolve(skillsDir);
-
-  if (
-    targetDir !== resolvedSkillsDir &&
-    !targetDir.startsWith(resolvedSkillsDir + sep)
-  ) {
-    throw new Error(`Security: skill target directory escapes "${skillsDir}".`);
-  }
-  return targetDir;
 }

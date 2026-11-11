@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Manifest } from "./manifest.js";
+import { isValidRegistryName } from "./source.js";
 
 export interface LockEntry {
   source: string;
@@ -33,9 +34,15 @@ export async function readLockfile(dir: string = "."): Promise<Lockfile> {
   try {
     const raw = await readFile(filePath, "utf-8");
     const json = JSON.parse(raw) as Partial<Lockfile>;
+    const skills = json.skills ?? {};
+    for (const name of Object.keys(skills)) {
+      if (!isValidRegistryName(name)) {
+        throw new Error(`Invalid skill name in lockfile: "${name}"`);
+      }
+    }
     return {
       lockfileVersion: json.lockfileVersion ?? 2,
-      skills: json.skills ?? {},
+      skills,
     };
   } catch (err: unknown) {
     if (isNodeError(err) && err.code === "ENOENT") {
@@ -67,6 +74,9 @@ export function addLockEntry(
   name: string,
   entry: LockEntry
 ): Lockfile {
+  if (!isValidRegistryName(name)) {
+    throw new Error(`Invalid skill name for lockfile: "${name}"`);
+  }
   const normalizedEntry: LockEntry = {
     ...entry,
     integrity: entry.integrity ?? (entry.sha256 ? `sha256-${entry.sha256}` : undefined),

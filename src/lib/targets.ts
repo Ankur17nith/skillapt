@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { resolve, join } from "node:path";
 import { symlink, cp, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { assertInside } from "./fs.js";
 
 export interface TargetDefinition {
   name: string;
@@ -70,7 +71,8 @@ export async function syncSkillToTarget(
 
   await mkdir(baseDir, { recursive: true });
 
-  const targetPath = join(baseDir, options.skillName);
+  assertInside(baseDir, options.skillName);
+  const targetPath = assertInside(baseDir, join(baseDir, options.skillName));
 
   if (existsSync(targetPath)) {
     await rm(targetPath, { recursive: true, force: true });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isValidRegistryName } from "./source.js";
 
 // ── Schema ──
 
@@ -12,7 +13,12 @@ const skillEntrySchema = z.object({
 });
 
 const manifestSchema = z.object({
-  skills: z.record(z.string(), skillEntrySchema).default({}),
+  skills: z.record(
+    z.string().refine((val) => isValidRegistryName(val), {
+      message: "Skill name must match registry name format",
+    }),
+    skillEntrySchema
+  ).default({}),
 });
 
 export type SkillEntry = z.infer<typeof skillEntrySchema>;

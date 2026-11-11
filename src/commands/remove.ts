@@ -8,9 +8,13 @@ import {
 } from "../lib/manifest.js";
 import { readLockfile, writeLockfile, removeLockEntry } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
+import { assertInside } from "../lib/fs.js";
 
 export async function removeCommand(name: string): Promise<void> {
   const skillsDir = getSkillsDir();
+
+  // Validate path traversal
+  assertInside(skillsDir, name);
 
   // Check manifest first
   const manifest = await readManifest();
@@ -21,7 +25,7 @@ export async function removeCommand(name: string): Promise<void> {
   }
 
   // Remove the skill directory
-  const skillDir = join(skillsDir, name);
+  const skillDir = assertInside(skillsDir, join(skillsDir, name));
   await rm(skillDir, { recursive: true, force: true });
 
   // Update skills.json
