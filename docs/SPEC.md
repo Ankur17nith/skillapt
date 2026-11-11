@@ -211,28 +211,37 @@ The consumer manifest declares the project's direct skill dependencies:
 
 ```json
 {
-  "name": "my-agent-workspace",
-  "version": "1.0.0",
-  "description": "Customer support AI agent configuration",
   "skills": {
-    "pdf-summarizer": "^1.2.0",
-    "@acme/ticket-classifier": "~2.0.0",
-    "text-cleaner": "1.0.2"
+    "pdf-summarizer": {
+      "source": "registry",
+      "version": "^1.2.0"
+    },
+    "@acme/ticket-classifier": {
+      "source": "registry",
+      "version": "~2.0.0"
+    },
+    "find-skills": {
+      "source": "github",
+      "ref": "main",
+      "subpath": "skills/find-skills"
+    }
   }
 }
 ```
 
-- `name`: Name of the consumer workspace (string).
-- `skills`: Object mapping skill package name to required SemVer range.
+- `skills`: Object mapping skill package name to its source declaration:
+  - For registry skills: `{ "source": "registry", "version": "<semver-range>" }`.
+  - For GitHub skills: `{ "source": "github", "ref": "<branch-tag-or-sha>", "subpath": "<optional-subfolder>" }`.
 
 ### 6.2 Consumer Lockfile (`skills.lock.json`)
 The lockfile guarantees deterministic, reproducible installations across developer workstations and CI/CD pipelines.
 
 ```json
 {
-  "lockfileVersion": 1,
+  "lockfileVersion": 2,
   "skills": {
     "pdf-summarizer": {
+      "source": "registry",
       "version": "1.2.0",
       "resolved": "https://registry.skillapt.dev/v1/skills/pdf-summarizer/-/1.2.0.tgz",
       "integrity": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -247,18 +256,11 @@ The lockfile guarantees deterministic, reproducible installations across develop
         "text-cleaner": "^1.0.0"
       }
     },
-    "text-cleaner": {
-      "version": "1.0.2",
-      "resolved": "https://registry.skillapt.dev/v1/skills/text-cleaner/-/1.0.2.tgz",
-      "integrity": "sha256-7d8312d8a427f71b9e0787389278918237abc091823481298471209348123049",
+    "find-skills": {
+      "source": "github",
+      "sha": "1234567890abcdef1234567890abcdef12345678",
       "sha256": "7d8312d8a427f71b9e0787389278918237abc091823481298471209348123049",
-      "category": "data",
-      "permissions": {
-        "network": false,
-        "shell": false,
-        "filesystem": "none"
-      },
-      "dependencies": {}
+      "subpath": "skills/find-skills"
     }
   }
 }
@@ -275,11 +277,30 @@ The lockfile guarantees deterministic, reproducible installations across develop
 
 `skillapt` employs a **flat dependency model** designed for agent prompt simplicity:
 
-### 7.1 Rules & Constraints
-1. **Publication-Time Validation**: Every dependency declared in `skill.json` MUST already exist in the registry at publish time and have at least one matching, non-removed (`active` or `yanked`) version satisfying the SemVer range. If a dependency cannot be satisfied, publish is rejected with `400 INVALID_DEPENDENCY`.
-2. **Maximum Dependency Depth**: 10 levels. Transitive trees deeper than 10 levels fail resolution.
-3. **No Cycles**: Dependency graphs must be Directed Acyclic Graphs (DAG). Any circular reference ($A \to B \to A$) causes an installation failure.
-4. **Flat Installation (One Version Per Name)**: Because AI agents access skills by name in context windows, there are no nested `node_modules`. If two dependencies require conflicting versions of the same skill (e.g. `foo@1.0.0` vs `foo@2.0.0`), the CLI raises a **Version Conflict Error** requiring the user to resolve the conflict.
+### 7.1 Resolver Rules & Behavior
+1. **Multi-Requirement Common Version Search**: When multiple packages require different SemVer ranges for the same dependency, `findCommonVersion` evaluates available versions in descending order to identify the highest version satisfying all ranges simultaneously.
+2. **Removed Version Exclusion**: Versions with status `"removed"` (e.g. administrative takedown) are strictly excluded from common version resolution. Yanked versions are excluded from range queries unless pinned.
+3. **Range Normalization**: The range string `"latest"` is normalized to `*` everywhere.
+4. **Child Dependency Re-Resolution**: When swapping a package to a reconciled common version, the resolver resolves that common version's child dependencies as well.
+5. **Depth & Cycle Limits**: Maximum recursion depth of 10 levels (`MAX_DEPTH = 10`); circular dependencies detected and rejected via active call stacks.
+6. **Flat On-Disk Layout**: Single version of each skill installed on disk (in `.skills/` and agent targets). Scoped packages map to flat folder names (`@scope/name` -> `scope--name`).
+
+### 7.2 What the CLI Enforces vs. Does Not Enforce
+
+#### What the CLI Enforces:
+- **Path Traversal Protection**: Uses `assertInside` boundary checks to guarantee extracted files remain strictly inside destination directories. Rejects `..` path segments, absolute paths, and symbolic/hard links.
+- **Pre-Extraction Integrity**: Validates SHA-256 checksums before unpacking tarballs.
+- **Resource Limits**: Rejects archives exceeding 500 files, 255-character path length, 25 MB uncompressed, or 5 MB compressed.
+- **Allowed Extensions & Magic Bytes**: Rejects banned executable extensions (`.exe`, `.dll`, `.so`) and inspects magic bytes (ELF, Mach-O, Windows PE, Java class) even if given an innocuous file extension.
+- **Case & Unicode NFC Normalization**: Prevents filesystem collisions on case-insensitive or Unicode decomposing filesystems.
+- **Deterministic Atomic Updates**: Extracts into temporary folders before swapping atomically, ensuring failed installations leave existing versions intact.
+- **Token Origin Binding**: Binds authentication tokens to registry origins, preventing token leakage to third-party or mismatching endpoints.
+- **Explicit Permission Confirmation**: Warns on declared permissions and flags `scripts/` directories, requiring interactive confirmation or `--yes` when `network: true` or `shell: true` are declared.
+
+#### What the CLI Does NOT Enforce:
+- **Runtime Sandbox Isolation**: Permissions declared in `skill.json` (`network`, `shell`, `filesystem`) are metadata declarations for agent and user awareness, not OS kernel sandboxes. Runtime sandboxing (containers, namespaces, seccomp) must be provided by the agent runner or host environment.
+- **Cryptographic Author Signatures**: Package integrity is verified via SHA-256 against hashes recorded in the registry or `skills.lock.json`. This proves the package matches what the registry stored, not an end-to-end cryptographic signature from the original package author.
+- **Semantic Prompt Safety**: The CLI does not perform semantic analysis or prompt injection filtering on natural language instructions in `SKILL.md`. Users must review skills before granting agents autonomy.
 
 ---
 
