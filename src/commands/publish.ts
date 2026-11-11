@@ -1,8 +1,9 @@
 import { readFile, stat, unlink } from "node:fs/promises";
 import { resolve, extname } from "node:path";
+import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import pc from "picocolors";
-import { packSkill } from "../lib/pack.js";
+import { packSkill, validateSkillTarball } from "../lib/pack.js";
 import { RegistryClient, type PublishResponse } from "../lib/registry.js";
 import { getAuthToken } from "../lib/auth.js";
 
@@ -51,15 +52,18 @@ export async function publishCommand(
 
   const ext = extname(resolvedTarget).toLowerCase();
   if (ext === ".tgz" || resolvedTarget.endsWith(".tar.gz")) {
-    // Direct tarball publishing
+    // Direct tarball publishing - must run local validation before uploading
     try {
       tarballBuffer = await readFile(resolvedTarget);
     } catch {
       throw new Error(`Cannot read tarball file at ${resolvedTarget}`);
     }
+    const validated = await validateSkillTarball(resolvedTarget);
+    pkgName = validated.manifest.name;
+    pkgVersion = validated.manifest.version;
   } else {
-    // Directory - pack first
-    const packResult = await packSkill(resolvedTarget);
+    // Directory - pack first into OS temp
+    const packResult = await packSkill(resolvedTarget, tmpdir());
     tarballBuffer = packResult.tarballBuffer;
     tempTarballPath = packResult.tarballPath;
     pkgName = packResult.manifest.name;

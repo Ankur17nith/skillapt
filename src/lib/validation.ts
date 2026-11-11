@@ -1,7 +1,10 @@
-import { readFile, readdir, stat, open, unlink } from "node:fs/promises";
-import { join, relative, resolve, extname, basename } from "node:path";
+import { readFile, readdir, stat, open, unlink, mkdtemp, rm } from "node:fs/promises";
+import { join, relative, resolve, extname, basename, isAbsolute, normalize, sep } from "node:path";
+import { tmpdir } from "node:os";
 import semver from "semver";
 import { z } from "zod";
+import YAML from "yaml";
+import { extract as tarExtract } from "tar";
 import type { Category, Permissions } from "./registry.js";
 
 export const RESERVED_NAMES = new Set([
@@ -15,6 +18,12 @@ export const ALLOWED_EXTENSIONS = new Set([
   ".json", ".yaml", ".yml", ".toml", ".csv", ".tsv",
   ".jinja", ".jinja2", ".mustache", ".hbs", ".template",
   ".js", ".mjs", ".cjs", ".ts", ".py", ".sh", ".bash", ".zsh", ".lua", ".rb",
+  ".html", ".css", ".xml", ".xsd", ".svg",
+  ".png", ".jpg", ".jpeg", ".pdf",
+]);
+
+export const ALLOWED_EXTENSIONLESS = new Set([
+  "license", "licence", "notice", "readme", "makefile"
 ]);
 
 export const ALLOWED_DOTFILES = new Set([
@@ -120,22 +129,27 @@ export function parseFrontmatter(markdown: string): Record<string, string> {
     throw new Error("SKILL.md YAML frontmatter is not closed with '---'.");
   }
 
-  const fmLines = lines.slice(1, endIdx);
+  const fmRaw = lines.slice(1, endIdx).join("\n");
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(fmRaw);
+  } catch (err: any) {
+    throw new Error(`SKILL.md contains invalid YAML frontmatter: ${err.message}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+
   const result: Record<string, string> = {};
-  for (const line of fmLines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine || trimmedLine.startsWith("#")) continue;
-    const colonIdx = trimmedLine.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = trimmedLine.slice(0, colonIdx).trim();
-    let val = trimmedLine.slice(colonIdx + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (value === null || value === undefined) {
+      result[key] = "";
+    } else if (typeof value === "string") {
+      result[key] = value.trim();
+    } else {
+      result[key] = String(value).trim();
     }
-    result[key] = val;
   }
   return result;
 }
@@ -253,6 +267,7 @@ export interface ValidateTreeOptions {
   allowExt?: string[];
   isGitHub?: boolean;
   requireSkillJson?: boolean;
+  excludeDirs?: string[];
 }
 
 export interface ValidateTreeResult {
@@ -285,6 +300,8 @@ export async function validateSkillTree(
     }
   }
 
+  const excludedDirs = (options.excludeDirs ?? []).map((d) => resolve(d));
+
   async function walk(currentDir: string, relPath: string, depth: number): Promise<void> {
     if (depth > MAX_DEPTH) {
       throw new Error(`Directory depth exceeds maximum limit of ${MAX_DEPTH} levels.`);
@@ -293,13 +310,40 @@ export async function validateSkillTree(
     const entries = await readdir(currentDir, { withFileTypes: true });
 
     for (const entry of entries) {
+      const fullPath = join(currentDir, entry.name);
+      const resolvedFullPath = resolve(fullPath);
+
+      if (entry.isDirectory()) {
+        // Exclude node_modules and output directories
+        if (entry.name === "node_modules") {
+          continue;
+        }
+        let isExcluded = false;
+        for (const excl of excludedDirs) {
+          if (resolvedFullPath === excl || resolvedFullPath.startsWith(excl + "/")) {
+            isExcluded = true;
+            break;
+          }
+        }
+        if (isExcluded) {
+          continue;
+        }
+      } else if (entry.isFile()) {
+        // Exclude *.tgz archives
+        if (entry.name.endsWith(".tgz")) {
+          continue;
+        }
+      }
+
       const entryRel = relPath ? `${relPath}/${entry.name}` : entry.name;
 
       if (entryRel.length > MAX_PATH_LENGTH) {
         throw new Error(`Path '${entryRel}' exceeds maximum length of ${MAX_PATH_LENGTH} characters.`);
       }
 
-      if (entryRel.includes("..") || entryRel.startsWith("/") || entryRel.startsWith("\\")) {
+      // Reject ".." only as a path segment, not as a substring
+      const segments = entryRel.split(/[/\\]/);
+      if (segments.some((seg) => seg === "..") || entryRel.startsWith("/") || entryRel.startsWith("\\")) {
         throw new Error(`Path '${entryRel}' contains forbidden path traversal.`);
       }
 
@@ -321,8 +365,6 @@ export async function validateSkillTree(
         throw new Error(`Symbolic link '${entryRel}' is prohibited.`);
       }
 
-      const fullPath = join(currentDir, entry.name);
-
       if (entry.isDirectory()) {
         if (entry.name === "scripts") {
           hasScripts = true;
@@ -331,12 +373,16 @@ export async function validateSkillTree(
       } else if (entry.isFile()) {
         const ext = extname(entry.name).toLowerCase();
         const base = basename(entry.name);
+        const baseLower = base.toLowerCase();
 
         if (BANNED_EXTENSIONS.has(ext)) {
           throw new Error(`Binary or archive extension '${ext}' in '${entryRel}' is prohibited.`);
         }
 
-        const isAllowed = allowedExts.has(ext) || ALLOWED_DOTFILES.has(base);
+        const isAllowed =
+          allowedExts.has(ext) ||
+          ALLOWED_DOTFILES.has(base) ||
+          (ext === "" && ALLOWED_EXTENSIONLESS.has(baseLower));
 
         if (!isAllowed) {
           if (options.isGitHub) {
@@ -405,10 +451,137 @@ export async function validateSkillTree(
     }
   }
 
+  result.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
   return {
     files: result,
     totalSize,
     skippedFiles,
     hasScripts,
   };
+}
+
+/**
+ * Validates a skill tarball (.tgz) locally according to SPEC.md section 13.
+ * Used before uploading to registry during publish.
+ */
+export async function validateSkillTarball(
+  tarballPath: string
+): Promise<{ manifest: SkillManifest; fileCount: number; totalSize: number }> {
+  const statInfo = await stat(tarballPath);
+  if (statInfo.size > MAX_COMPRESSED_SIZE) {
+    throw new Error(
+      `Compressed tarball exceeds maximum limit of 5 MB (${statInfo.size} bytes).`
+    );
+  }
+
+  const tempValDir = await mkdtemp(join(tmpdir(), "skillapt-val-tar-"));
+  try {
+    let fileCount = 0;
+    let uncompressedBytes = 0;
+
+    await tarExtract({
+      file: tarballPath,
+      cwd: tempValDir,
+      onReadEntry(entry) {
+        fileCount++;
+        if (fileCount > MAX_FILE_COUNT) {
+          throw new Error(
+            `Security: tarball contains more than ${MAX_FILE_COUNT} files. Aborting.`
+          );
+        }
+
+        uncompressedBytes += entry.size || 0;
+        if (uncompressedBytes > MAX_UNCOMPRESSED_SIZE) {
+          throw new Error(
+            `Security: tarball uncompressed size exceeds ${MAX_UNCOMPRESSED_SIZE} bytes (25 MB). Aborting.`
+          );
+        }
+
+        if (entry.path.length > MAX_PATH_LENGTH) {
+          throw new Error(
+            `Security: path in tarball exceeds ${MAX_PATH_LENGTH} characters — "${entry.path.slice(0, 50)}...". Aborting.`
+          );
+        }
+
+        if (entry.path.includes("\0")) {
+          throw new Error(`Security: tarball entry path contains null byte. Aborting.`);
+        }
+
+        if (entry.type === "SymbolicLink" || entry.type === "Link") {
+          throw new Error(`Security: tarball contains a link — "${entry.path}". Aborting.`);
+        }
+
+        const allowedTypes = ["File", "Directory", "OldFile"];
+        if (!allowedTypes.includes(entry.type)) {
+          throw new Error(
+            `Security: tarball entry type "${entry.type}" is not permitted — "${entry.path}". Aborting.`
+          );
+        }
+
+        if (isAbsolute(entry.path) || /^[a-zA-Z]:/.test(entry.path)) {
+          throw new Error(`Security: tarball contains an absolute path — "${entry.path}". Aborting.`);
+        }
+
+        const normalized = normalize(entry.path);
+        if (
+          normalized.startsWith("..") ||
+          normalized.includes(`${sep}..`) ||
+          normalized.includes(`..${sep}`)
+        ) {
+          throw new Error(`Security: tarball contains a path traversal — "${entry.path}". Aborting.`);
+        }
+      },
+    });
+
+    let sourceDir = tempValDir;
+    const topEntries = await readdir(tempValDir);
+    if (topEntries.length === 1) {
+      const singlePath = join(tempValDir, topEntries[0]);
+      const s = await stat(singlePath);
+      if (s.isDirectory()) {
+        sourceDir = singlePath;
+      }
+    }
+
+    const manifestPath = join(sourceDir, "skill.json");
+    let manifestRaw: string;
+    try {
+      manifestRaw = await readFile(manifestPath, "utf-8");
+    } catch {
+      throw new Error("Tarball must contain a 'skill.json' file.");
+    }
+
+    let manifestJson: unknown;
+    try {
+      manifestJson = JSON.parse(manifestRaw);
+    } catch {
+      throw new Error("skill.json contains invalid JSON syntax.");
+    }
+
+    const manifest = validateSkillManifest(manifestJson);
+
+    const skillMdPath = join(sourceDir, "SKILL.md");
+    let skillMdContent: string;
+    try {
+      skillMdContent = await readFile(skillMdPath, "utf-8");
+    } catch {
+      throw new Error("Tarball is not a valid skill — it must contain a SKILL.md file.");
+    }
+
+    validateSkillMd(skillMdContent, manifest.name);
+
+    const tree = await validateSkillTree(sourceDir, {
+      expectedName: manifest.name,
+      requireSkillJson: true,
+    });
+
+    return {
+      manifest,
+      fileCount: tree.files.length,
+      totalSize: tree.totalSize,
+    };
+  } finally {
+    await rm(tempValDir, { recursive: true, force: true });
+  }
 }

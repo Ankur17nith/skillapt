@@ -7,6 +7,8 @@ import {
   packSkill,
   validateSkillManifest,
   validateSkillMd,
+  parseFrontmatter,
+  validateSkillTarball,
   checkMagicBytes,
   validateAndCollectFiles,
   getUnscopedName,
@@ -233,5 +235,139 @@ No frontmatter at all.
 
     expect(yankSpy).toHaveBeenCalledWith("test-skill", "1.0.0", "Security flaw", "apt_live_mocktoken123");
     expect(res.yanked).toBe(true);
+  });
+
+  it("produces reproducible tarballs with identical sha256 regardless of file creation order or time", async () => {
+    await initCommand({ dir: tempDir, name: "repro-skill" });
+
+    // Create files
+    await writeFile(join(tempDir, "b-file.txt"), "content B");
+    await writeFile(join(tempDir, "a-file.txt"), "content A");
+    await writeFile(join(tempDir, "c-file.txt"), "content C");
+
+    const pack1 = await packSkill(tempDir);
+    // Wait briefly to ensure timestamps would differ if not normalized
+    await new Promise((r) => setTimeout(r, 50));
+    const pack2 = await packSkill(tempDir);
+
+    expect(pack1.sha256).toBe(pack2.sha256);
+    expect(pack1.integrity).toBe(pack2.integrity);
+    expect(pack1.compressedSize).toBe(pack2.compressedSize);
+  });
+
+  it("parses YAML frontmatter block scalars (> and |)", () => {
+    const foldedMd = `---
+name: folded-skill
+description: >
+  This is a multiline
+  folded description that spans
+  several lines.
+category: documents
+version: 1.0.0
+---
+# Folded Skill
+Body content here for test.
+`;
+    const foldedFm = parseFrontmatter(foldedMd);
+    expect(foldedFm.name).toBe("folded-skill");
+    expect(foldedFm.description).toContain("This is a multiline folded description");
+
+    const literalMd = `---
+name: literal-skill
+description: |
+  Line 1 of description
+  Line 2 of description
+category: coding
+version: 1.0.0
+---
+# Literal Skill
+Body content here for test.
+`;
+    const literalFm = parseFrontmatter(literalMd);
+    expect(literalFm.name).toBe("literal-skill");
+    expect(literalFm.description).toContain("Line 1 of description\nLine 2 of description");
+
+    const validated = validateSkillMd(literalMd, "literal-skill");
+    expect(validated.name).toBe("literal-skill");
+    expect(validated.description).toContain("Line 1 of description");
+  });
+
+  it("allows extensionless LICENSE, NOTICE, README, Makefile and allowed media/web extensions", async () => {
+    await initCommand({ dir: tempDir, name: "media-skill" });
+
+    // Extensionless allowed files
+    await writeFile(join(tempDir, "LICENSE"), "MIT License content");
+    await writeFile(join(tempDir, "NOTICE"), "Notice content");
+    await writeFile(join(tempDir, "Makefile"), "all:\n\techo done");
+
+    // Allowed web & media extensions
+    await writeFile(join(tempDir, "page.html"), "<html><body>Hello</body></html>");
+    await writeFile(join(tempDir, "style.css"), "body { margin: 0; }");
+    await writeFile(join(tempDir, "data.xml"), "<root></root>");
+    await writeFile(join(tempDir, "schema.xsd"), "<xs:schema></xs:schema>");
+    await writeFile(join(tempDir, "vector.svg"), "<svg></svg>");
+    await writeFile(join(tempDir, "doc.pdf"), "%PDF-1.4 mock pdf content");
+    await writeFile(join(tempDir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    await writeFile(join(tempDir, "photo.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+
+    const result = await packSkill(tempDir);
+    expect(result.fileCount).toBeGreaterThan(5);
+  });
+
+  it("allows filenames with '..' as a substring but rejects '..' as a path segment", async () => {
+    await initCommand({ dir: tempDir, name: "dots-skill" });
+
+    // '..' as substring in a file name should be allowed
+    await writeFile(join(tempDir, "file..with..dots.txt"), "valid filename with dots");
+    const result = await packSkill(tempDir);
+    expect(existsSync(result.tarballPath)).toBe(true);
+  });
+
+  it("excludes node_modules, *.tgz files, and the output directory from the package", async () => {
+    await initCommand({ dir: tempDir, name: "exclude-skill" });
+
+    // Create node_modules directory with invalid files
+    await mkdir(join(tempDir, "node_modules", "some-dep"), { recursive: true });
+    await writeFile(join(tempDir, "node_modules", "some-dep", "bad.exe"), "binary");
+
+    // Create an existing .tgz file in the source directory
+    await writeFile(join(tempDir, "existing-archive.tgz"), "archive content");
+
+    // Pack into custom --out directory
+    const customOut = join(tempDir, "custom-out");
+    const result = await packCommand(tempDir, { out: customOut });
+
+    expect(existsSync(result.tarballPath)).toBe(true);
+    expect(result.tarballPath).toContain("custom-out");
+
+    // Verify tarball does not contain node_modules or existing-archive.tgz
+    const { manifest, fileCount } = await validateSkillTarball(result.tarballPath);
+    expect(manifest.name).toBe("exclude-skill");
+  });
+
+  it("publish <file.tgz> runs local validation and rejects invalid tarball before upload", async () => {
+    await initCommand({ dir: tempDir, name: "invalid-tar-skill" });
+
+    // Put a banned .exe file in tempDir
+    await writeFile(join(tempDir, "malicious.exe"), "bad content");
+
+    // Create tarball manually bypassing packSkill check
+    const badTarPath = join(tempDir, "bad.tgz");
+    const tar = await import("tar");
+    await tar.create({ gzip: true, cwd: tempDir, file: badTarPath }, [
+      "skill.json",
+      "SKILL.md",
+      "malicious.exe",
+    ]);
+
+    const publishSpy = vi.spyOn(RegistryClient.prototype, "publishSkill");
+
+    await expect(
+      publishCommand(badTarPath, {
+        token: "apt_live_mocktoken123",
+      })
+    ).rejects.toThrow(/prohibited/i);
+
+    expect(publishSpy).not.toHaveBeenCalled();
   });
 });

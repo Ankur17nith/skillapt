@@ -1,10 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import * as tar from "tar";
 import {
   RESERVED_NAMES,
   ALLOWED_EXTENSIONS,
+  ALLOWED_EXTENSIONLESS,
   ALLOWED_DOTFILES,
   BANNED_EXTENSIONS,
   MAX_COMPRESSED_SIZE,
@@ -22,11 +23,13 @@ import {
   validateSkillMd,
   checkMagicBytes,
   validateSkillTree,
+  validateSkillTarball,
 } from "./validation.js";
 
 export {
   RESERVED_NAMES,
   ALLOWED_EXTENSIONS,
+  ALLOWED_EXTENSIONLESS,
   ALLOWED_DOTFILES,
   BANNED_EXTENSIONS,
   MAX_COMPRESSED_SIZE,
@@ -44,12 +47,17 @@ export {
   validateSkillMd,
   checkMagicBytes,
   validateSkillTree,
+  validateSkillTarball,
 };
 
 export async function validateAndCollectFiles(
-  dir: string
+  dir: string,
+  excludeDirs?: string[]
 ): Promise<{ files: string[]; totalSize: number }> {
-  const tree = await validateSkillTree(dir, { requireSkillJson: true });
+  const tree = await validateSkillTree(dir, {
+    requireSkillJson: true,
+    excludeDirs,
+  });
   return { files: tree.files, totalSize: tree.totalSize };
 }
 
@@ -65,14 +73,15 @@ export interface PackResult {
 }
 
 /**
- * Validates skill files and creates a .tar.gz tarball in outDir (defaults to dir).
+ * Validates skill files and creates a .tar.gz tarball in outDir (defaults to ./dist).
  */
 export async function packSkill(
   dir: string = ".",
   outDir?: string
 ): Promise<PackResult> {
   const resolvedDir = resolve(dir);
-  const targetOutDir = outDir ? resolve(outDir) : resolvedDir;
+  const targetOutDir = outDir ? resolve(outDir) : resolve(join(resolvedDir, "dist"));
+  await mkdir(targetOutDir, { recursive: true });
 
   // 1. Read & validate skill.json
   const manifestPath = join(resolvedDir, "skill.json");
@@ -103,8 +112,9 @@ export async function packSkill(
 
   validateSkillMd(skillMdContent, manifest.name);
 
-  // 3. Validate all files using shared validateSkillTree
-  const { files, totalSize } = await validateAndCollectFiles(resolvedDir);
+  // 3. Validate all files using shared validateSkillTree, excluding output directory
+  const { files, totalSize } = await validateAndCollectFiles(resolvedDir, [targetOutDir]);
+  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
   // 4. Create tar.gz archive
   const unscoped = getUnscopedName(manifest.name);
@@ -118,6 +128,7 @@ export async function packSkill(
       file: tarballPath,
       portable: true,
       noMtime: true,
+      mtime: new Date(0),
     },
     files
   );

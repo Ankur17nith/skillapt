@@ -1,4 +1,5 @@
-import { resolve, basename } from "node:path";
+import { resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
 import pc from "picocolors";
 import { packSkill, type PackResult } from "../lib/pack.js";
 
@@ -12,6 +13,9 @@ export async function packCommand(
   options: PackCommandOptions = {}
 ): Promise<PackResult> {
   const resolvedDir = resolve(dir);
+  if (options.out) {
+    await mkdir(resolve(options.out), { recursive: true });
+  }
   const result = await packSkill(resolvedDir, options.out);
 
   if (options.json) {
