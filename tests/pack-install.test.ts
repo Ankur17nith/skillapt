@@ -15,7 +15,7 @@ describe("package pack and install verification", () => {
 
     try {
       // 1. Run npm pack in rootDir, outputting tarball into tmpDir
-      const packOutput = execFileSync("npm", ["pack", "--pack-destination", tmpDir], {
+      const packOutput = execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", tmpDir], {
         cwd: rootDir,
         encoding: "utf-8",
       }).trim();

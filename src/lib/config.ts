@@ -19,11 +19,42 @@ export function getSkillsDir(): string {
 }
 
 /**
+ * Validate that a registry URL uses HTTPS, allowing HTTP only for localhost and 127.0.0.1.
+ */
+export function validateRegistryUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid registry URL: "${url}". Must be a valid URL.`);
+  }
+
+  if (parsed.protocol === "https:") {
+    return url;
+  }
+
+  if (parsed.protocol === "http:") {
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") {
+      return url;
+    }
+    throw new Error(
+      `Insecure registry URL "${url}". Registry URL must use HTTPS (HTTP is only permitted for localhost / 127.0.0.1).`
+    );
+  }
+
+  throw new Error(
+    `Unsupported protocol "${parsed.protocol}" in registry URL "${url}". Only HTTPS is allowed (HTTP for localhost).`
+  );
+}
+
+/**
  * Get the active registry base URL (supports SKILLAPT_REGISTRY env var).
  */
 export function getRegistryUrl(): string {
   const url = process.env.SKILLAPT_REGISTRY ?? DEFAULT_REGISTRY_URL;
-  return url.replace(/\/+$/, "");
+  const clean = url.replace(/\/+$/, "");
+  return validateRegistryUrl(clean);
 }
 
 /**

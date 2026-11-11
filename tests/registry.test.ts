@@ -34,7 +34,7 @@ describe("RegistryClient", () => {
     expect(client.getBaseUrl()).toBe("http://localhost:8787/v1");
   });
 
-  it("sends User-Agent and Authorization header with Bearer token", async () => {
+  it("does not send Authorization header on anonymous endpoints like search", async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ skills: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } }), {
         status: 200,
@@ -56,7 +56,38 @@ describe("RegistryClient", () => {
     expect(calledUrl).toBe("https://mock.registry/v1/skills?q=pdf");
     const headers = calledInit.headers as Headers;
     expect(headers.get("User-Agent")).toContain(PRODUCT_NAME);
+    expect(headers.get("Authorization")).toBeNull();
+  });
+
+  it("sends Authorization header on authenticated endpoints like getMe", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "1", handle: "user" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const client = new RegistryClient({
+      baseUrl: "https://mock.registry/v1",
+      token: "apt_live_test12345",
+      retries: 0,
+    });
+
+    await client.getMe();
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, calledInit] = mockFetch.mock.calls[0];
+    const headers = calledInit.headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer apt_live_test12345");
+  });
+
+  it("requires https for registry URL, allowing http only for localhost/127.0.0.1", () => {
+    expect(() => new RegistryClient({ baseUrl: "http://insecure.example.com/v1" })).toThrow("HTTPS");
+    expect(() => new RegistryClient({ baseUrl: "ftp://registry.example.com" })).toThrow();
+    expect(new RegistryClient({ baseUrl: "https://registry.example.com" }).getBaseUrl()).toBe("https://registry.example.com");
+    expect(new RegistryClient({ baseUrl: "http://localhost:3000/v1" }).getBaseUrl()).toBe("http://localhost:3000/v1");
+    expect(new RegistryClient({ baseUrl: "http://127.0.0.1:8787/v1" }).getBaseUrl()).toBe("http://127.0.0.1:8787/v1");
   });
 
   it("maps 404 response to NotFoundError with human-friendly message", async () => {

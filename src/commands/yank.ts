@@ -1,6 +1,7 @@
 import pc from "picocolors";
 import { RegistryClient, type YankResponse } from "../lib/registry.js";
 import { getAuthToken } from "../lib/auth.js";
+import { getRegistryUrl, validateRegistryUrl } from "../lib/config.js";
 
 export interface YankCommandOptions {
   reason?: string;
@@ -47,7 +48,26 @@ export async function yankCommand(
 
   const { name, version } = parsePackageVersionSpec(spec, versionArg);
 
-  const token = options.token ?? (await getAuthToken()) ?? process.env.SKILLAPT_TOKEN;
+  const regUrl = options.registry ?? getRegistryUrl();
+  validateRegistryUrl(regUrl);
+  const targetOrigin = new URL(regUrl).origin;
+  const configuredOrigin = new URL(getRegistryUrl()).origin;
+
+  let token = options.token;
+  if (!token) {
+    if (targetOrigin !== configuredOrigin) {
+      // Must not reuse a stored token for a different origin
+      token = process.env.SKILLAPT_TOKEN?.trim();
+      if (!token) {
+        throw new Error(
+          `Registry "${regUrl}" does not match the configured registry origin. Provide an explicit --token or SKILLAPT_TOKEN.`
+        );
+      }
+    } else {
+      token = (await getAuthToken(regUrl)) ?? process.env.SKILLAPT_TOKEN?.trim();
+    }
+  }
+
   if (!token) {
     throw new Error("Authentication required to yank skills. Run 'skillapt login' or set SKILLAPT_TOKEN.");
   }

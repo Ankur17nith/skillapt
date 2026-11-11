@@ -7,11 +7,27 @@ import { getBanner } from "../lib/banner.js";
 
 export interface LoginOptions {
   token?: string;
+  tokenStdin?: boolean;
 }
 
 export async function loginCommand(options: LoginOptions = {}): Promise<void> {
   const registryUrl = getRegistryUrl();
-  let token = options.token?.trim();
+  let token: string | undefined;
+
+  if (options.tokenStdin) {
+    let buf = "";
+    for await (const chunk of process.stdin) {
+      buf += chunk;
+    }
+    token = buf.trim();
+  } else if (options.token) {
+    console.warn(
+      pc.yellow(
+        "Warning: Passing --token on the command line may leak secrets to shell history and process listings. Consider using --token-stdin or SKILLAPT_TOKEN instead."
+      )
+    );
+    token = options.token.trim();
+  }
 
   if (!token) {
     const authUrl = `${registryUrl}/auth/github`;
@@ -27,7 +43,7 @@ export async function loginCommand(options: LoginOptions = {}): Promise<void> {
 
     if (!process.stdin.isTTY) {
       throw new Error(
-        "Standard input is not a terminal. Provide a token using 'skillapt login --token <token>' or set SKILLAPT_TOKEN."
+        "Standard input is not a terminal. Provide a token using 'skillapt login --token-stdin' or set SKILLAPT_TOKEN."
       );
     }
 

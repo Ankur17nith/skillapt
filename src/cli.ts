@@ -125,7 +125,8 @@ program
 program
   .command("login")
   .description("Authenticate with the skillapt registry via GitHub")
-  .option("--token <token>", "provide API token directly")
+  .option("--token <token>", "provide API token directly (warn: leaks to shell history)")
+  .option("--token-stdin", "read API token from standard input")
   .action(
     wrap(async (opts: LoginOptions) => {
       await loginCommand(opts);

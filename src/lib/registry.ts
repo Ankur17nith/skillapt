@@ -1,4 +1,4 @@
-import { getRegistryUrl, PRODUCT_NAME } from "./config.js";
+import { getRegistryUrl, validateRegistryUrl, PRODUCT_NAME } from "./config.js";
 import { getVersion } from "./banner.js";
 import { getAuthToken } from "./auth.js";
 
@@ -253,8 +253,15 @@ export class RegistryClient {
   private retries: number;
 
   constructor(options: RegistryClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? getRegistryUrl()).replace(/\/+$/, "");
-    this.token = options.token ?? process.env.SKILLAPT_TOKEN;
+    const rawUrl = options.baseUrl ?? getRegistryUrl();
+    this.baseUrl = validateRegistryUrl(rawUrl).replace(/\/+$/, "");
+
+    // SKILLAPT_TOKEN applies to the configured registry only
+    const configuredOrigin = new URL(getRegistryUrl()).origin;
+    const clientOrigin = new URL(this.baseUrl).origin;
+    const envToken = clientOrigin === configuredOrigin ? process.env.SKILLAPT_TOKEN : undefined;
+
+    this.token = options.token ?? envToken;
     this.timeoutMs = options.timeoutMs ?? 15000;
     this.retries = options.retries ?? 2;
   }
@@ -268,7 +275,7 @@ export class RegistryClient {
   }
 
   /**
-   * Search skills with query filters, sorting, and pagination.
+   * Search skills with query filters, sorting, and pagination (anonymous).
    */
   async searchSkills(options: SearchSkillsOptions = {}): Promise<SearchSkillsResponse> {
     const params = new URLSearchParams();
@@ -282,29 +289,30 @@ export class RegistryClient {
 
     const qs = params.toString();
     const endpoint = `/skills${qs ? `?${qs}` : ""}`;
-    return this.request<SearchSkillsResponse>(endpoint, { method: "GET" });
+    return this.request<SearchSkillsResponse>(endpoint, { method: "GET", anonymous: true });
   }
 
   /**
-   * Retrieve full skill metadata including available versions.
+   * Retrieve full skill metadata including available versions (anonymous).
    */
   async getSkill(name: string): Promise<SkillDetail> {
     const encodedName = this.encodePackageName(name);
-    return this.request<SkillDetail>(`/skills/${encodedName}`, { method: "GET" });
+    return this.request<SkillDetail>(`/skills/${encodedName}`, { method: "GET", anonymous: true });
   }
 
   /**
-   * Retrieve metadata for a specific skill version.
+   * Retrieve metadata for a specific skill version (anonymous).
    */
   async getSkillVersion(name: string, version: string): Promise<SkillVersionDetail> {
     const encodedName = this.encodePackageName(name);
     return this.request<SkillVersionDetail>(`/skills/${encodedName}/${encodeURIComponent(version)}`, {
       method: "GET",
+      anonymous: true,
     });
   }
 
   /**
-   * Download package tarball stream and return as ReadableStream along with expected sha256/etag if present.
+   * Download package tarball stream and return as ReadableStream along with expected sha256/etag if present (anonymous).
    */
   async downloadTarball(name: string, version: string): Promise<{
     stream: ReadableStream<Uint8Array>;
@@ -312,7 +320,7 @@ export class RegistryClient {
   }> {
     const encodedName = this.encodePackageName(name);
     const endpoint = `/skills/${encodedName}/-/${encodeURIComponent(version)}.tgz`;
-    const res = await this.rawRequest(endpoint, { method: "GET" });
+    const res = await this.rawRequest(endpoint, { method: "GET", anonymous: true });
 
     if (!res.body) {
       throw new RegistryError("Registry returned an empty response body.", res.status);
@@ -329,7 +337,7 @@ export class RegistryClient {
    * Publish a .tar.gz archive.
    */
   async publishSkill(tarballBuffer: Uint8Array, token?: string): Promise<PublishResponse> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to publish skills. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -342,6 +350,7 @@ export class RegistryClient {
       method: "POST",
       body: formData,
       token: authToken,
+      anonymous: false,
     });
   }
 
@@ -349,7 +358,7 @@ export class RegistryClient {
    * Yank a skill version from discovery and resolution.
    */
   async yankSkill(name: string, version: string, reason?: string, token?: string): Promise<YankResponse> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to yank skills. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -360,6 +369,7 @@ export class RegistryClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason }),
       token: authToken,
+      anonymous: false,
     });
   }
 
@@ -367,7 +377,7 @@ export class RegistryClient {
    * Get current authenticated user.
    */
   async getMe(token?: string): Promise<User> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -375,6 +385,7 @@ export class RegistryClient {
     return this.request<User>("/me", {
       method: "GET",
       token: authToken,
+      anonymous: false,
     });
   }
 
@@ -382,7 +393,7 @@ export class RegistryClient {
    * Create a new API token.
    */
   async createToken(name: string, token?: string): Promise<CreateTokenResponse> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to create tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -392,6 +403,7 @@ export class RegistryClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
       token: authToken,
+      anonymous: false,
     });
   }
 
@@ -399,7 +411,7 @@ export class RegistryClient {
    * List API tokens.
    */
   async listTokens(token?: string): Promise<{ tokens: TokenSummary[] }> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to list tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -407,6 +419,7 @@ export class RegistryClient {
     return this.request<{ tokens: TokenSummary[] }>("/tokens", {
       method: "GET",
       token: authToken,
+      anonymous: false,
     });
   }
 
@@ -414,7 +427,7 @@ export class RegistryClient {
    * Revoke an API token by ID.
    */
   async revokeToken(id: string, token?: string): Promise<{ message: string }> {
-    const authToken = token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    const authToken = token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined;
     if (!authToken) {
       throw new AuthError("Authentication required to revoke tokens. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
@@ -422,22 +435,23 @@ export class RegistryClient {
     return this.request<{ message: string }>(`/tokens/${encodeURIComponent(id)}`, {
       method: "DELETE",
       token: authToken,
+      anonymous: false,
     });
   }
 
   /**
-   * Platform statistics.
+   * Platform statistics (anonymous).
    */
   async getStats(): Promise<StatsResponse> {
-    return this.request<StatsResponse>("/stats", { method: "GET" });
+    return this.request<StatsResponse>("/stats", { method: "GET", anonymous: true });
   }
 
   /**
-   * Health status of registry service.
+   * Health status of registry service (anonymous).
    */
   async getHealth(): Promise<HealthStatus> {
     try {
-      return await this.request<HealthStatus>("/health", { method: "GET" });
+      return await this.request<HealthStatus>("/health", { method: "GET", anonymous: true });
     } catch {
       // Fallback: if /health is not implemented on server, test reachability via /stats
       await this.getStats();
@@ -463,7 +477,7 @@ export class RegistryClient {
 
   private async request<T>(
     path: string,
-    options: RequestInit & { token?: string } = {}
+    options: RequestInit & { token?: string; anonymous?: boolean } = {}
   ): Promise<T> {
     const res = await this.rawRequest(path, options);
     const text = await res.text();
@@ -481,17 +495,24 @@ export class RegistryClient {
 
   private async rawRequest(
     path: string,
-    options: RequestInit & { token?: string } = {}
+    options: RequestInit & { token?: string; anonymous?: boolean } = {}
   ): Promise<Response> {
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-    const token = options.token ?? this.token ?? (await getAuthToken()) ?? undefined;
+    // Never send Authorization on anonymous endpoints (search, info, tarball download)
+    const token = options.anonymous
+      ? undefined
+      : (options.token ?? this.token ?? (await getAuthToken(this.baseUrl)) ?? undefined);
 
     const headers = new Headers(options.headers);
     headers.set("User-Agent", `${PRODUCT_NAME}/${getVersion()}`);
     headers.set("Accept", "application/json, application/gzip");
 
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
+    if (!options.anonymous && token) {
+      const requestOrigin = new URL(url).origin;
+      const baseOrigin = new URL(this.baseUrl).origin;
+      if (requestOrigin === baseOrigin) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
     }
 
     let lastError: Error | null = null;
