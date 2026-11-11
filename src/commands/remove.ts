@@ -9,12 +9,14 @@ import {
 import { readLockfile, writeLockfile, removeLockEntry } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
 import { assertInside } from "../lib/fs.js";
+import { toOnDiskName } from "../lib/source.js";
 
 export async function removeCommand(name: string): Promise<void> {
   const skillsDir = getSkillsDir();
+  const onDiskName = toOnDiskName(name);
 
   // Validate path traversal
-  assertInside(skillsDir, name);
+  assertInside(skillsDir, onDiskName);
 
   // Check manifest first
   const manifest = await readManifest();
@@ -25,7 +27,7 @@ export async function removeCommand(name: string): Promise<void> {
   }
 
   // Remove the skill directory
-  const skillDir = assertInside(skillsDir, join(skillsDir, name));
+  const skillDir = assertInside(skillsDir, join(skillsDir, onDiskName));
   await rm(skillDir, { recursive: true, force: true });
 
   // Update skills.json

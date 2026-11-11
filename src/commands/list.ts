@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { readManifest } from "../lib/manifest.js";
 import { readLockfile } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
+import { toOnDiskName } from "../lib/source.js";
 
 export interface ListOptions {
   json?: boolean;
@@ -97,7 +98,7 @@ async function getDescription(
   name: string,
   skillsDir: string
 ): Promise<string> {
-  const skillDir = join(skillsDir, name);
+  const skillDir = join(skillsDir, toOnDiskName(name));
 
   // Try skill.json first
   try {

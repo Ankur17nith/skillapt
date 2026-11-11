@@ -38,6 +38,23 @@ export function isValidRegistryName(name: string): boolean {
 }
 
 /**
+ * Maps a package name to a flat on-disk directory name:
+ * Scoped packages: @alice/pdf-tool -> alice--pdf-tool
+ * Unscoped packages: pdf-tool -> pdf-tool
+ */
+export function toOnDiskName(name: string): string {
+  if (name.startsWith("@")) {
+    const slash = name.indexOf("/");
+    if (slash !== -1) {
+      const scope = name.slice(1, slash);
+      const pkg = name.slice(slash + 1);
+      return `${scope}--${pkg}`;
+    }
+  }
+  return name;
+}
+
+/**
  * Regex for GitHub repository sources: owner/repo format.
  */
 export const GITHUB_SOURCE_REGEX = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;

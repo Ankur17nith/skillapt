@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import pc from "picocolors";
 import { moveDir, assertInside } from "./fs.js";
-import { validateSkillTree, parseFrontmatter } from "./validation.js";
-import { isValidRegistryName } from "./source.js";
+import { validateSkillTree, parseFrontmatter, rewriteFrontmatterName } from "./validation.js";
+import { isValidRegistryName, toOnDiskName } from "./source.js";
 
 // ── Security Limits from SPEC.md ──
 
@@ -295,11 +295,43 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
       }
     }
 
-    // Step 7: Atomic swap into targetDir
-    const targetDir = assertInside(skillsDir, effectiveName);
+    // Step 7: Flatten scoped name for on-disk folder & rewrite SKILL.md name
+    const onDiskName = toOnDiskName(effectiveName);
+    if (effectiveName.startsWith("@")) {
+      const skillMdPath = join(sourceDir, "SKILL.md");
+      try {
+        const md = await readFile(skillMdPath, "utf-8");
+        const rewritten = rewriteFrontmatterName(md, onDiskName);
+        await writeFile(skillMdPath, rewritten, "utf-8");
+      } catch {
+        // ignore if cannot rewrite
+      }
+    }
+
+    // Step 8: Atomic swap into targetDir
+    const targetDir = assertInside(skillsDir, onDiskName);
     await mkdir(resolve(targetDir, ".."), { recursive: true });
 
     if (existsSync(targetDir)) {
+      // Check for collision with an existing package of different name
+      try {
+        const existingRaw = await readFile(join(targetDir, "skill.json"), "utf-8");
+        const existingJson = JSON.parse(existingRaw);
+        if (
+          existingJson.name &&
+          existingJson.name !== effectiveName &&
+          toOnDiskName(existingJson.name) === onDiskName
+        ) {
+          throw new Error(
+            `Naming collision: directory "${onDiskName}" is already occupied by package "${existingJson.name}". Cannot install "${effectiveName}".`
+          );
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.startsWith("Naming collision:")) {
+          throw err;
+        }
+      }
+
       const backupDir = join(tmpDir, `backup-target-${Date.now()}`);
       await moveDir(targetDir, backupDir);
       try {

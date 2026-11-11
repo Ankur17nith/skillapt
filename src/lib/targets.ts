@@ -1,9 +1,10 @@
 import { homedir } from "node:os";
 import { resolve, join } from "node:path";
-import { symlink, cp, mkdir, rm } from "node:fs/promises";
+import { symlink, cp, mkdir, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import pc from "picocolors";
 import { assertInside } from "./fs.js";
+import { toOnDiskName } from "./source.js";
 
 export interface TargetDefinition {
   name: string;
@@ -139,8 +140,30 @@ export async function syncSkillToTarget(
 
   await mkdir(baseDir, { recursive: true });
 
-  assertInside(baseDir, options.skillName);
-  const targetPath = assertInside(baseDir, join(baseDir, options.skillName));
+  const onDiskName = toOnDiskName(options.skillName);
+  assertInside(baseDir, onDiskName);
+  const targetPath = assertInside(baseDir, join(baseDir, onDiskName));
+
+  // Check collision in target directory
+  if (existsSync(targetPath)) {
+    try {
+      const existingRaw = await readFile(join(targetPath, "skill.json"), "utf-8");
+      const existingJson = JSON.parse(existingRaw);
+      if (
+        existingJson.name &&
+        existingJson.name !== options.skillName &&
+        toOnDiskName(existingJson.name) === onDiskName
+      ) {
+        throw new Error(
+          `Naming collision in target "${targetKey}": "${onDiskName}" is already occupied by package "${existingJson.name}". Cannot sync "${options.skillName}".`
+        );
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith("Naming collision in target")) {
+        throw err;
+      }
+    }
+  }
 
   await rm(targetPath, { recursive: true, force: true });
 

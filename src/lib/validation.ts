@@ -140,6 +140,55 @@ export function parseFrontmatter(markdown: string): Record<string, string> {
   return result;
 }
 
+/**
+ * Rewrites the frontmatter `name` field in SKILL.md to a new name.
+ */
+export function rewriteFrontmatterName(content: string, newName: string): string {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("---")) {
+    return content;
+  }
+  const lines = content.split("\n");
+  let endFmIdx = -1;
+  let startFmIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === "---" || line === "...") {
+      if (startFmIdx === -1) {
+        startFmIdx = i;
+      } else {
+        endFmIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (startFmIdx === -1 || endFmIdx === -1) {
+    return content;
+  }
+
+  let replaced = false;
+  for (let i = startFmIdx + 1; i < endFmIdx; i++) {
+    const line = lines[i];
+    const colonIdx = line.indexOf(":");
+    if (colonIdx !== -1) {
+      const key = line.slice(0, colonIdx).trim();
+      if (key === "name") {
+        lines[i] = `name: ${newName}`;
+        replaced = true;
+        break;
+      }
+    }
+  }
+
+  if (!replaced) {
+    lines.splice(startFmIdx + 1, 0, `name: ${newName}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function validateSkillMd(content: string, expectedName?: string): { name: string; description: string } {
   const nonWhitespace = content.replace(/\s/g, "");
   if (nonWhitespace.length < MIN_SKILL_MD_CHARS) {

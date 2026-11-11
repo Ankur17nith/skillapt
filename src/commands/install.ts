@@ -8,6 +8,7 @@ import {
   isValidRegistryName,
   isValidGitHubSource,
   REGISTRY_NAME_REGEX,
+  toOnDiskName,
 } from "../lib/source.js";
 import { resolveRef, downloadTarball } from "../lib/github.js";
 import { extractSkill } from "../lib/extract.js";
@@ -118,15 +119,24 @@ async function installGitHub(
     throw new Error(`Invalid skill name "${name}".`);
   }
 
+  // Check collision with manifest
+  let manifest = await readManifest();
+  for (const existingName of Object.keys(manifest.skills)) {
+    if (existingName !== name && toOnDiskName(existingName) === toOnDiskName(name)) {
+      throw new Error(
+        `Naming collision: package "${name}" collides with already installed package "${existingName}" on disk name "${toOnDiskName(name)}".`
+      );
+    }
+  }
+
   // If skill.json provided a different name, ensure it's in the expected directory
-  const expectedDir = assertInside(skillsDir, name);
+  const expectedDir = assertInside(skillsDir, toOnDiskName(name));
   if (installDir !== expectedDir) {
     await rm(expectedDir, { recursive: true, force: true });
     await moveDir(installDir, expectedDir);
   }
 
   // Update skills.json
-  let manifest = await readManifest();
   manifest = addSkill(manifest, name, {
     source: `${parsed.owner}/${parsed.repo}`,
     ref: parsed.ref ?? undefined,
@@ -159,6 +169,17 @@ async function installRegistry(
   }
 ): Promise<void> {
   const skillsDir = getSkillsDir();
+
+  // Check collision with manifest
+  const currentManifest = await readManifest();
+  for (const existingName of Object.keys(currentManifest.skills)) {
+    if (existingName !== parsed.name && toOnDiskName(existingName) === toOnDiskName(parsed.name)) {
+      throw new Error(
+        `Naming collision: package "${parsed.name}" collides with already installed package "${existingName}" on disk name "${toOnDiskName(parsed.name)}".`
+      );
+    }
+  }
+
   const client = new RegistryClient();
   const resolver = new DependencyResolver(client);
 
@@ -221,7 +242,7 @@ async function syncTargets(
 
   for (const target of targets) {
     for (const name of skillNames) {
-      const sourceDir = join(skillsDir, name);
+      const sourceDir = join(skillsDir, toOnDiskName(name));
       const res = await syncSkillToTarget({
         skillName: name,
         sourceDir,
@@ -276,7 +297,7 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
       if (!isValidRegistryName(name)) {
         throw new Error(`Invalid skill name in lockfile: "${name}"`);
       }
-      assertInside(skillsDir, name);
+      assertInside(skillsDir, toOnDiskName(name));
 
       if (entry.source === "registry" || (!entry.source.includes("/") && entry.version)) {
         // Registry skill from lockfile: DO NOT call resolve endpoint!
@@ -341,7 +362,7 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
     if (!isValidRegistryName(name)) {
       throw new Error(`Invalid skill name in manifest: "${name}"`);
     }
-    assertInside(skillsDir, name);
+    assertInside(skillsDir, toOnDiskName(name));
     const isGitHub = entry.source.includes("/") && !entry.source.startsWith("@");
     if (isGitHub) {
       if (!isValidGitHubSource(entry.source)) {
