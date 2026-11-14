@@ -6,6 +6,7 @@ import { z } from "zod";
 import YAML from "yaml";
 import { extract as tarExtract } from "tar";
 import type { Category, Permissions } from "./registry.js";
+import { toOnDiskName } from "./source.js";
 
 // ── Reserved Names ──
 export const RESERVED_NAMES = new Set([
@@ -270,11 +271,11 @@ export function validateSkillMd(content: string, expectedName?: string): { name:
   }
 
   if (expectedName) {
-    const unscoped = getUnscopedName(expectedName);
-    const fmUnscoped = getUnscopedName(fm.name.trim());
-    if (fmUnscoped !== unscoped && fm.name.trim() !== expectedName) {
+    const expectedFolder = toOnDiskName(expectedName);
+    const fmName = fm.name.trim();
+    if (fmName !== expectedFolder) {
       throw new Error(
-        `SKILL.md frontmatter name '${fm.name}' does not match unscoped package name '${unscoped}'.`
+        `SKILL.md frontmatter name '${fm.name}' does not match unscoped package name '${expectedFolder}'.`
       );
     }
   }

@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (feat/antigravity-target complete) |
+| Last updated | 2026-11-15 (fix/scoped-names-and-target-layout complete) |
 | Current milestone | M2: Correct behavior |
-| Current branch | feat/antigravity-target |
-| Current task | CLI-11, CLI-12 complete |
+| Current branch | fix/scoped-names-and-target-layout |
+| Current task | CLI-13 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 173 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 175 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -260,7 +260,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - [x] **CLI-12** Verify the Antigravity (and Codex) directory conventions against current vendor documentation; record sources and date in §11 (D-005).
 
 #### Branch `fix/scoped-names-and-target-layout`
-- [ ] **CLI-13** (A-09) Implement the flat folder rule `scope--name` (D-003/D-004) for `.skills/` and every target; lockfile records both package name and folder; reject packages whose SKILL.md `name` != folder name.
+- [x] **CLI-13** (A-09) Implement the flat folder rule `scope--name` (D-003/D-004) for `.skills/` and every target; lockfile records both package name and folder; reject packages whose SKILL.md `name` != folder name.
   V: install `@alice/pdf-tool` -> `.skills/alice--pdf-tool` and `<target>/alice--pdf-tool`; collision test with an unscoped `alice--pdf-tool` is impossible because `--` is banned.
 
 #### Branch `fix/install-lockfile-update-logic`
@@ -353,6 +353,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | fix/registry-token-safety | CLI-06, CLI-07 | origin-bound token, anonymous endpoint safety, openBrowser shell injection protection, login env var (164 pass, 1 skipped) | merge to main, start Branch 4 |
 | 2026-11-15 | Antigravity | feat/install-content-verification | CLI-08, CLI-09, CLI-10 | validate.ts content rules, permissions prompt/--yes, atomic swap, regression tests (172 pass, 1 skipped) | merge to main, start Branch 5 |
 | 2026-11-15 | Antigravity | feat/antigravity-target | CLI-11, CLI-12 | single TARGET_CONFIGS table, antigravity & antigravity-cli, legacy fallback notice, env override SKILLAPT_<TARGET>_DIR, e2e tests (173 pass, 1 skipped) | merge to main, start Branch 6 |
+| 2026-11-15 | Antigravity | fix/scoped-names-and-target-layout | CLI-13 | flat on-disk folder layout (scope--name), D-004 SKILL.md name match without rewriting, lockfile records folder, collision rejection (175 pass, 1 skipped) | merge to main, start Branch 7 |
 
 ---
 
