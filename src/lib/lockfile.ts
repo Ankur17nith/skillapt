@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Manifest } from "./manifest.js";
-import { isValidRegistryName } from "./source.js";
+import { isValidRegistryName, toOnDiskName } from "./source.js";
 
 export interface LockEntry {
   source: string;
@@ -11,6 +11,7 @@ export interface LockEntry {
   sha256?: string;
   sha?: string; // GitHub commit SHA for github sources
   subpath?: string | null;
+  folder?: string;
   category?: string;
   permissions?: unknown;
   dependencies?: Record<string, string>;
@@ -79,6 +80,7 @@ export function addLockEntry(
   }
   const normalizedEntry: LockEntry = {
     ...entry,
+    folder: entry.folder ?? toOnDiskName(name),
     integrity: entry.integrity ?? (entry.sha256 ? `sha256-${entry.sha256}` : undefined),
     sha256: entry.sha256 ?? (entry.integrity?.startsWith("sha256-") ? entry.integrity.slice(7) : undefined),
   };

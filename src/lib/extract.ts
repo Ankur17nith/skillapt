@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import pc from "picocolors";
 import { moveDir, assertInside } from "./fs.js";
-import { validateSkillTree, parseFrontmatter, rewriteFrontmatterName } from "./validation.js";
+import { validateSkillTree, parseFrontmatter } from "./validation.js";
 import { isValidRegistryName, toOnDiskName } from "./source.js";
 
 // ── Security Limits from SPEC.md ──
@@ -306,18 +306,8 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
       }
     }
 
-    // Step 7: Flatten scoped name for on-disk folder & rewrite SKILL.md name
+    // Step 7: Flatten scoped name for on-disk folder (D-003, D-004: never rewrite SKILL.md)
     const onDiskName = toOnDiskName(effectiveName);
-    if (effectiveName.startsWith("@")) {
-      const skillMdPath = join(sourceDir, "SKILL.md");
-      try {
-        const md = await readFile(skillMdPath, "utf-8");
-        const rewritten = rewriteFrontmatterName(md, onDiskName);
-        await writeFile(skillMdPath, rewritten, "utf-8");
-      } catch {
-        // ignore if cannot rewrite
-      }
-    }
 
     // Step 8: Atomic swap into targetDir
     const targetDir = assertInside(skillsDir, onDiskName);

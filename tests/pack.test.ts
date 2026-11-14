@@ -98,9 +98,21 @@ Content with enough length to satisfy 10 characters.
     expect(res.name).toBe("pdf-summarizer");
     expect(res.description).toBe("Extracts text from PDF files.");
 
-    // Scoped package name matches unscoped frontmatter name
-    const res2 = validateSkillMd(validMd, "@alice/pdf-summarizer");
-    expect(res2.name).toBe("pdf-summarizer");
+    // Scoped package name matches on-disk folder name (D-004)
+    const validScopedMd = `---
+name: alice--pdf-summarizer
+description: Extracts text from PDF files.
+---
+# PDF Summarizer
+Content with enough length.
+`;
+    const res2 = validateSkillMd(validScopedMd, "@alice/pdf-summarizer");
+    expect(res2.name).toBe("alice--pdf-summarizer");
+
+    // Frontmatter name differing from on-disk folder name is rejected (D-004)
+    expect(() => validateSkillMd(validMd, "@alice/pdf-summarizer")).toThrow(
+      /does not match unscoped package name/i
+    );
   });
 
   it("rejects SKILL.md with mismatched name", () => {
