@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (baseline verified) |
+| Last updated | 2026-11-15 (fix/path-traversal complete) |
 | Current milestone | M1: Critical security and installability |
-| Current branch | (none yet; start with `fix/path-traversal`) |
-| Current task | CLI-01 |
+| Current branch | fix/path-traversal |
+| Current task | CLI-01, CLI-02 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 156 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 160 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -225,10 +225,10 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 ### M1. Critical security and installability
 
 #### Branch `fix/path-traversal`
-- [ ] **CLI-01** (A-01) Add `assertInside(baseDir, candidate)` (resolve + path-separator boundary) in `src/lib/fs.ts`.
+- [x] **CLI-01** (A-01) Add `assertInside(baseDir, candidate)` (resolve + path-separator boundary) in `src/lib/fs.ts`.
   AC: used in installGitHub rename, extractSkill, syncSkillToTarget, removeCommand, lockfile install; lockfile keys, manifest keys and GitHub `source` (owner/repo regex without `.`/`..`) validated before use.
   V: new test: tarball with skill.json name `../../victim` -> install fails, victim dir untouched.
-- [ ] **CLI-02** (A-01) In `installGitHub`, validate the skill.json name against the registry name rule; if invalid, ignore it and use the default folder name (log a warning). Never `rm` a path built from an untrusted name.
+- [x] **CLI-02** (A-01) In `installGitHub`, validate the skill.json name against the registry name rule; if invalid, ignore it and use the default folder name (log a warning). Never `rm` a path built from an untrusted name.
   V: unit tests for `..`, absolute, backslash, empty, over-long, `@a/b` names.
 
 #### Branch `fix/installation-and-packaging`
@@ -348,6 +348,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 |---|---|---|---|---|---|
 | 2026-11-15 | audit | (none) | baseline | 19 findings recorded (§6); tests 113/115 | start CLI-01 on `fix/path-traversal` |
 | 2026-11-15 | Antigravity | main | baseline verification | verified build, typecheck, tests (156 pass, 1 skipped); D-003, D-004, D-005 accepted | start Branch 1 fix/path-traversal |
+| 2026-11-15 | Antigravity | fix/path-traversal | CLI-01, CLI-02 | assertInside, source/name validation, path traversal regression tests green (160 pass, 1 skipped) | merge to main, start Branch 2 |
 
 ---
 

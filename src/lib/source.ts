@@ -22,19 +22,42 @@ export type SkillSource = GitHubSource | RegistrySource;
 // Backward-compatible alias for existing code
 export type ParsedSource = GitHubSource;
 
+export const RESERVED_NAMES = new Set([
+  "skillapt", "admin", "api", "www", "official", "registry", "support", "security", "root",
+  "claude", "openai", "anthropic", "cursor", "codex", "antigravity", "gemini", "chatgpt",
+  "null", "undefined", "core", "internal", "system", "auth", "account", "dashboard"
+]);
+
 /**
  * Validate a package name according to the registry specification:
- * 3 to 50 characters, lowercase alphanumeric and hyphens.
- * May optionally have a scope prefix: @<scope>/<name> (scope 2 to 30 chars).
+ * ^(@[a-z0-9]+(-[a-z0-9]+)*\/)?[a-z0-9]+(-[a-z0-9]+)*$
+ * 3 to 50 characters for name part, scope 2 to 30 chars.
+ * No consecutive hyphens ("--") in scope or name (D-003).
  */
 export const REGISTRY_NAME_REGEX =
-  /^(@[a-z0-9-]{2,30}\/)?[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+  /^(@[a-z0-9]+(-[a-z0-9]+)*\/)?[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * Checks if a string is a valid registry package name.
  */
 export function isValidRegistryName(name: string): boolean {
-  return REGISTRY_NAME_REGEX.test(name);
+  if (!name || typeof name !== "string") return false;
+  if (name.includes("--")) return false;
+  if (!REGISTRY_NAME_REGEX.test(name)) return false;
+
+  if (name.startsWith("@")) {
+    const slash = name.indexOf("/");
+    if (slash === -1) return false;
+    const scope = name.slice(1, slash);
+    const pkg = name.slice(slash + 1);
+    if (scope.length < 2 || scope.length > 30) return false;
+    if (pkg.length < 3 || pkg.length > 50) return false;
+    if (RESERVED_NAMES.has(scope) || RESERVED_NAMES.has(pkg)) return false;
+  } else {
+    if (name.length < 3 || name.length > 50) return false;
+    if (RESERVED_NAMES.has(name)) return false;
+  }
+  return true;
 }
 
 /**
@@ -56,14 +79,24 @@ export function toOnDiskName(name: string): string {
 
 /**
  * Regex for GitHub repository sources: owner/repo format.
+ * Rejects "." and ".." in owner or repo segments.
  */
-export const GITHUB_SOURCE_REGEX = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+export const GITHUB_SOURCE_REGEX =
+  /^(?!\.{1,2}$)[a-zA-Z0-9_.-]+\/(?!\.{1,2}$)[a-zA-Z0-9_.-]+$/;
 
 /**
  * Checks if a string is a valid GitHub repository source (owner/repo).
+ * Strictly rejects "." and ".." and any ".." path traversal segments.
  */
 export function isValidGitHubSource(source: string): boolean {
-  return GITHUB_SOURCE_REGEX.test(source);
+  if (!source || typeof source !== "string") return false;
+  if (source.includes("..")) return false;
+  const parts = source.split("/");
+  if (parts.length !== 2) return false;
+  const [owner, repo] = parts;
+  if (!owner || !repo) return false;
+  if (owner === "." || owner === ".." || repo === "." || repo === "..") return false;
+  return /^[a-zA-Z0-9_.-]+$/.test(owner) && /^[a-zA-Z0-9_.-]+$/.test(repo);
 }
 
 /**
@@ -138,6 +171,13 @@ function parseUrl(input: string): GitHubSource {
   const owner = parts[0];
   const repo = parts[1].replace(/\.git$/, "");
 
+  if (owner === "." || owner === ".." || owner.includes("..") || !/^[a-zA-Z0-9_.-]+$/.test(owner)) {
+    throw new Error(`Invalid owner name: "${owner}"`);
+  }
+  if (repo === "." || repo === ".." || repo.includes("..") || !/^[a-zA-Z0-9_.-]+$/.test(repo)) {
+    throw new Error(`Invalid repo name: "${repo}"`);
+  }
+
   if (parts.length === 2) {
     return {
       type: "github",
@@ -196,14 +236,13 @@ function parseGitHubShorthand(input: string): GitHubSource {
     );
   }
 
-  const validNameRe = /^[a-zA-Z0-9._-]+$/;
   const owner = parts[0];
   const repo = parts[1];
 
-  if (!validNameRe.test(owner)) {
+  if (owner === "." || owner === ".." || owner.includes("..") || !/^[a-zA-Z0-9_.-]+$/.test(owner)) {
     throw new Error(`Invalid owner name: "${owner}"`);
   }
-  if (!validNameRe.test(repo)) {
+  if (repo === "." || repo === ".." || repo.includes("..") || !/^[a-zA-Z0-9_.-]+$/.test(repo)) {
     throw new Error(`Invalid repo name: "${repo}"`);
   }
 

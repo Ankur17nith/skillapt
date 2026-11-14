@@ -114,10 +114,19 @@ async function installGitHub(
     yes: options?.yes,
   });
 
-  // Try to read a name from skill.json
-  const name = (await readSkillName(installDir)) ?? defaultName;
-  if (!isValidRegistryName(name)) {
-    throw new Error(`Invalid skill name "${name}".`);
+  // Try to read a name from skill.json; if invalid, ignore it, use defaultName and warn
+  const rawName = await readSkillName(installDir);
+  let name = defaultName;
+  if (rawName) {
+    if (isValidRegistryName(rawName)) {
+      name = rawName;
+    } else {
+      console.warn(
+        pc.yellow(
+          `Warning: invalid skill.json name "${rawName}". Using default folder name "${defaultName}".`
+        )
+      );
+    }
   }
 
   // Check collision with manifest
@@ -420,18 +429,9 @@ async function readSkillName(dir: string): Promise<string | null> {
     const raw = await readFile(join(dir, "skill.json"), "utf-8");
     const json = JSON.parse(raw) as { name?: string };
     if (typeof json.name === "string" && json.name.trim()) {
-      const trimmed = json.name.trim();
-      if (!REGISTRY_NAME_REGEX.test(trimmed)) {
-        throw new Error(
-          `Invalid skill name in skill.json: "${trimmed}". Must match registry name regex.`
-        );
-      }
-      return trimmed;
+      return json.name.trim();
     }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.startsWith("Invalid skill name in skill.json")) {
-      throw err;
-    }
+  } catch {
     // No skill.json or invalid JSON — that's fine
   }
   return null;
