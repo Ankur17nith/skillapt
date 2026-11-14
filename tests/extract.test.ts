@@ -397,4 +397,121 @@ describe("extractSkill", () => {
     });
     expect(existsSync(join(result, "SKILL.md"))).toBe(true);
   });
+
+  it("rejects ELF magic bytes disguised inside a .py script", async () => {
+    const elfHeader = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]);
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("elf-py-skill"),
+      "script.py": elfHeader,
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "elf-py-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("ELF executable binary magic bytes");
+  });
+
+  it("rejects Windows PE (MZ) magic bytes disguised inside a .txt file", async () => {
+    const mzHeader = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00]); // 'MZ'
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("mz-txt-skill"),
+      "notes.txt": mzHeader,
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "mz-txt-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("Windows PE executable binary magic bytes");
+  });
+
+  it("rejects hidden directory in path segment like .claude/settings.json", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("hidden-dir-skill"),
+      ".claude/settings.json": '{"setting": true}',
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "hidden-dir-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("Hidden file or directory");
+  });
+
+  it("rejects case-colliding duplicate paths (e.g. helper.js and HELPER.JS)", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("case-collision-skill"),
+      "helper.js": 'console.log("lowercase");',
+      "HELPER.JS": 'console.log("uppercase");',
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "case-collision-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("Duplicate path detected");
+  });
+
+  it("rejects directory nesting exceeding maximum depth of 10 (depth 11)", async () => {
+    const deepPath = "d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/deep.txt";
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("depth-skill"),
+      [deepPath]: "deep nested content",
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "depth-skill",
+        skillsDir,
+      })
+    ).rejects.toThrow("Directory depth exceeds maximum limit of 10 levels");
+  });
+
+  it("sha256 mismatch aborts and leaves NO leftover files in skillsDir", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("mismatch-skill"),
+      "important.txt": "content",
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "mismatch-skill",
+        skillsDir,
+        expectedSha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      })
+    ).rejects.toThrow("Integrity check failed");
+
+    // skillsDir must contain nothing
+    const remaining = await readdir(skillsDir);
+    expect(remaining).toHaveLength(0);
+    expect(existsSync(join(skillsDir, "mismatch-skill"))).toBe(false);
+  });
+
+  it("GitHub install with --strict fails hard on disallowed file extension", async () => {
+    const tarPath = await createTarball(tmpDir, {
+      "SKILL.md": makeSkillMd("strict-skill"),
+      "doc.unsupported": "some data",
+    });
+
+    await expect(
+      extractSkill({
+        tarballStream: fileToWebStream(tarPath),
+        name: "strict-skill",
+        skillsDir,
+        isGitHub: true,
+        strict: true,
+      })
+    ).rejects.toThrow("File extension '.unsupported'");
+  });
 });

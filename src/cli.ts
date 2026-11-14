@@ -59,14 +59,16 @@ program
   .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)")
   .option("-g, --global", "install target skills globally to user home directory")
   .option("-y, --yes", "automatically confirm permissions prompts")
+  .option("--strict", "fail GitHub installs on content rule violations instead of warning")
   .option("--allow-ext <extensions>", "additional allowed file extensions for GitHub installs (comma-separated)")
   .action(
-    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean; yes?: boolean; allowExt?: string }) => {
+    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean; yes?: boolean; strict?: boolean; allowExt?: string }) => {
       await installCommand(source, {
         frozen: opts?.frozen,
         target: opts?.target,
         global: opts?.global,
         yes: opts?.yes,
+        strict: opts?.strict,
         allowExt: opts?.allowExt ? opts.allowExt.split(",").map((e) => e.trim()).filter(Boolean) : undefined,
       });
     })

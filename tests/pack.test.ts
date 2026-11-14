@@ -300,18 +300,21 @@ Body content here for test.
     await writeFile(join(tempDir, "NOTICE"), "Notice content");
     await writeFile(join(tempDir, "Makefile"), "all:\n\techo done");
 
-    // Allowed web & media extensions
+    // Allowed web extensions
     await writeFile(join(tempDir, "page.html"), "<html><body>Hello</body></html>");
     await writeFile(join(tempDir, "style.css"), "body { margin: 0; }");
     await writeFile(join(tempDir, "data.xml"), "<root></root>");
     await writeFile(join(tempDir, "schema.xsd"), "<xs:schema></xs:schema>");
     await writeFile(join(tempDir, "vector.svg"), "<svg></svg>");
-    await writeFile(join(tempDir, "doc.pdf"), "%PDF-1.4 mock pdf content");
-    await writeFile(join(tempDir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    await writeFile(join(tempDir, "photo.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
 
     const result = await packSkill(tempDir);
     expect(result.fileCount).toBeGreaterThan(5);
+  });
+
+  it("rejects non-allowlisted media files like images or PDFs (D-006 pending)", async () => {
+    await initCommand({ dir: tempDir, name: "media-skill" });
+    await writeFile(join(tempDir, "doc.pdf"), "%PDF-1.4 mock pdf content");
+    await expect(packSkill(tempDir)).rejects.toThrow(/extension '\.pdf'/i);
   });
 
   it("allows filenames with '..' as a substring but rejects '..' as a path segment", async () => {
