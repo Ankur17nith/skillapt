@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/path-traversal complete) |
+| Last updated | 2026-11-15 (fix/installation-and-packaging complete) |
 | Current milestone | M1: Critical security and installability |
-| Current branch | fix/path-traversal |
-| Current task | CLI-01, CLI-02 complete |
+| Current branch | fix/installation-and-packaging |
+| Current task | CLI-03, CLI-04, CLI-05 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 160 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 161 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -232,11 +232,11 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
   V: unit tests for `..`, absolute, backslash, empty, over-long, `@a/b` names.
 
 #### Branch `fix/installation-and-packaging`
-- [ ] **CLI-03** (A-02) package.json: `"prepare": "npm run build"`, `"prepublishOnly": "npm run typecheck && npm test && npm run build"`; `files` = `dist`, `README.md`, `LICENSE`; `dist/cli.js` starts with `#!/usr/bin/env node`; `engines.node >=20`.
+- [x] **CLI-03** (A-02) package.json: `"prepare": "npm run build"`, `"prepublishOnly": "npm run typecheck && npm test && npm run build"`; `files` = `dist`, `README.md`, `LICENSE`; `dist/cli.js` starts with `#!/usr/bin/env node`; `engines.node >=20`.
   V: `npm pack` -> install the tarball in a temp dir -> `skillapt --version` works.
-- [ ] **CLI-04** (A-02) Rewrite `install.sh`: remove the `curl .../dist/cli.js` fallback; if npm is missing print instructions and exit 1; handle EACCES (guide to `npm config set prefix` / version manager, never sudo); support `VERSION=x.y.z`; after install verify `command -v skillapt` and `skillapt --version`, exit 1 with a clear message on failure; print success only after verification.
+- [x] **CLI-04** (A-02) Rewrite `install.sh`: remove the `curl .../dist/cli.js` fallback; if npm is missing print instructions and exit 1; handle EACCES (guide to `npm config set prefix` / version manager, never sudo); support `VERSION=x.y.z`; after install verify `command -v skillapt` and `skillapt --version`, exit 1 with a clear message on failure; print success only after verification.
   V: run the script in a clean container with Node 20 and 22.
-- [ ] **CLI-05** (A-16, A-18) Remove `skillpm` bin alias, `SKILLPM_DIR` fallback, `skillpm` User-Agent; remove `@types/tar`; delete dead code in `encodePackageName`; make `doctor` read-only (no mkdir).
+- [x] **CLI-05** (A-16, A-18) Remove `skillpm` bin alias, `SKILLPM_DIR` fallback, `skillpm` User-Agent; remove `@types/tar`; delete dead code in `encodePackageName`; make `doctor` read-only (no mkdir).
   V: `grep -ri skillpm src package.json` returns nothing; typecheck passes.
 
 #### Branch `fix/registry-token-safety`
@@ -349,6 +349,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | audit | (none) | baseline | 19 findings recorded (§6); tests 113/115 | start CLI-01 on `fix/path-traversal` |
 | 2026-11-15 | Antigravity | main | baseline verification | verified build, typecheck, tests (156 pass, 1 skipped); D-003, D-004, D-005 accepted | start Branch 1 fix/path-traversal |
 | 2026-11-15 | Antigravity | fix/path-traversal | CLI-01, CLI-02 | assertInside, source/name validation, path traversal regression tests green (160 pass, 1 skipped) | merge to main, start Branch 2 |
+| 2026-11-15 | Antigravity | fix/installation-and-packaging | CLI-03, CLI-04, CLI-05 | package.json scripts/files, install.sh rewrite with VERSION, doctor read-only, dead code removed | merge to main, start Branch 3 |
 
 ---
 
