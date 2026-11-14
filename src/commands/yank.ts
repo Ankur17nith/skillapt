@@ -56,13 +56,10 @@ export async function yankCommand(
   let token = options.token;
   if (!token) {
     if (targetOrigin !== configuredOrigin) {
-      // Must not reuse a stored token for a different origin
-      token = process.env.SKILLAPT_TOKEN?.trim();
-      if (!token) {
-        throw new Error(
-          `Registry "${regUrl}" does not match the configured registry origin. Provide an explicit --token or SKILLAPT_TOKEN.`
-        );
-      }
+      // Must not reuse a stored token or SKILLAPT_TOKEN for a different origin
+      throw new Error(
+        `Registry "${regUrl}" does not match the configured registry origin. Provide an explicit --token.`
+      );
     } else {
       token = (await getAuthToken(regUrl)) ?? process.env.SKILLAPT_TOKEN?.trim();
     }

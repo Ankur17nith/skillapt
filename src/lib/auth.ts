@@ -120,11 +120,10 @@ export async function getAuthToken(targetRegistryUrl?: string): Promise<string |
   const targetOrigin = targetRegistryUrl ? new URL(targetRegistryUrl).origin : configuredOrigin;
 
   // When a different registry origin is explicitly targeted:
-  // Do NOT reuse stored token from a different origin.
-  // SKILLAPT_TOKEN can be used if user set it.
+  // SKILLAPT_TOKEN applies to configured registry only.
+  // Stored token is bound to its origin and is never reused for a different origin.
   if (targetOrigin !== configuredOrigin) {
-    const envToken = process.env.SKILLAPT_TOKEN?.trim();
-    return envToken || null;
+    return null;
   }
 
   const envToken = process.env.SKILLAPT_TOKEN?.trim();
