@@ -65,9 +65,10 @@ describe("auth", () => {
     expect(await getStoredToken("https://other-registry.dev/v1")).toBeNull();
     expect(await getAuthToken("https://other-registry.dev/v1")).toBeNull();
 
-    // But if SKILLAPT_TOKEN is set, it can be returned
+    // SKILLAPT_TOKEN applies to configured registry only; different origin returns null
     process.env.SKILLAPT_TOKEN = "custom_env_token";
-    expect(await getAuthToken("https://other-registry.dev/v1")).toBe("custom_env_token");
+    expect(await getAuthToken("https://other-registry.dev/v1")).toBeNull();
+    expect(await getAuthToken("https://registry.skillapt.dev/v1")).toBe("custom_env_token");
   });
 
   it("clears stored token on logout", async () => {
@@ -149,5 +150,64 @@ describe("auth", () => {
     const [, calledArgs] = vi.mocked(execFile).mock.calls[0];
     expect(Array.isArray(calledArgs)).toBe(true);
     expect(calledArgs).toContain("https://registry.skillapt.dev/auth/github");
+  });
+
+  it("passes a URL containing $(touch /tmp/pwned) and a double quote as an argument without a shell", async () => {
+    vi.mocked(execFile).mockClear();
+
+    const maliciousUrl = 'https://registry.skillapt.dev/auth?q=$(touch /tmp/pwned)"';
+    const success = await openBrowser(maliciousUrl);
+    expect(success).toBe(true);
+    expect(execFile).toHaveBeenCalled();
+    const [file, calledArgs] = vi.mocked(execFile).mock.calls[0];
+    // Must be invoked directly via binary, not via sh -c or cmd /c string concatenation
+    if (process.platform === "win32") {
+      expect(file).toContain("cmd");
+      expect(calledArgs).toEqual(["/c", "start", "", maliciousUrl]);
+    } else {
+      expect(calledArgs).toEqual([maliciousUrl]);
+    }
+  });
+
+  it("loginCommand honors SKILLAPT_TOKEN environment variable", async () => {
+    process.env.SKILLAPT_TOKEN = "apt_live_env_token_456";
+    vi.spyOn(RegistryClient.prototype, "getMe").mockResolvedValue({
+      id: "usr_456",
+      handle: "envuser",
+      name: "Env User",
+      email: "env@example.com",
+      avatarUrl: "",
+      createdAt: "2026-11-01T00:00:00Z",
+    });
+
+    await loginCommand();
+    expect(await getStoredToken()).toBe("apt_live_env_token_456");
+  });
+
+  it("a mock server on a second origin must never receive an Authorization header", async () => {
+    // Store token for origin A
+    await setStoredToken("secret_token_origin_a", "https://origin-a.example.com/v1");
+
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "1", handle: "origin-b-user" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    // Create client for origin B without explicit token
+    const clientB = new RegistryClient({
+      baseUrl: "https://origin-b.example.com/v1",
+      retries: 0,
+    });
+
+    // Make request on client B
+    await clientB.getSkill("test-skill");
+
+    expect(mockFetch).toHaveBeenCalled();
+    const [, calledInit] = mockFetch.mock.calls[0];
+    const headers = calledInit.headers as Headers;
+    expect(headers.get("Authorization")).toBeNull();
   });
 });

@@ -27,6 +27,8 @@ export async function loginCommand(options: LoginOptions = {}): Promise<void> {
       )
     );
     token = options.token.trim();
+  } else if (process.env.SKILLAPT_TOKEN?.trim()) {
+    token = process.env.SKILLAPT_TOKEN.trim();
   }
 
   if (!token) {

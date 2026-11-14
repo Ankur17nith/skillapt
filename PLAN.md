@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/installation-and-packaging complete) |
+| Last updated | 2026-11-15 (fix/registry-token-safety complete) |
 | Current milestone | M1: Critical security and installability |
-| Current branch | fix/installation-and-packaging |
-| Current task | CLI-03, CLI-04, CLI-05 complete |
+| Current branch | fix/registry-token-safety |
+| Current task | CLI-06, CLI-07 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 161 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 164 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -240,9 +240,9 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
   V: `grep -ri skillpm src package.json` returns nothing; typecheck passes.
 
 #### Branch `fix/registry-token-safety`
-- [ ] **CLI-06** (A-03) Registry URL must be `https://` (or localhost http). Store `{origin, token}`; send the token only when the request origin equals the stored origin; `SKILLAPT_TOKEN` applies to the configured registry only; never send Authorization on anonymous endpoints (search, info, health, tarball download); `--registry <other>` never reuses a stored token (require explicit token).
+- [x] **CLI-06** (A-03) Registry URL must be `https://` (or localhost http). Store `{origin, token}`; send the token only when the request origin equals the stored origin; `SKILLAPT_TOKEN` applies to the configured registry only; never send Authorization on anonymous endpoints (search, info, health, tarball download); `--registry <other>` never reuses a stored token (require explicit token).
   V: tests with a mock server on a second origin assert no Authorization header; http non-localhost is rejected.
-- [ ] **CLI-07** (A-04, A-17) `login --token-stdin` and `SKILLAPT_TOKEN`; warn when `--token <value>` is used; remove the inline token example from the README. Replace `openBrowser` exec strings with `execFile`/`spawn` argument arrays (`open`, `xdg-open`, `cmd /c start "" url`) and require `https:` URLs.
+- [x] **CLI-07** (A-04, A-17) `login --token-stdin` and `SKILLAPT_TOKEN`; warn when `--token <value>` is used; remove the inline token example from the README. Replace `openBrowser` exec strings with `execFile`/`spawn` argument arrays (`open`, `xdg-open`, `cmd /c start "" url`) and require `https:` URLs.
   V: unit test passes a URL containing `$(touch /tmp/pwned)` and `"` and asserts no shell is involved.
 
 ### M2. Correct behavior
@@ -350,6 +350,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | main | baseline verification | verified build, typecheck, tests (156 pass, 1 skipped); D-003, D-004, D-005 accepted | start Branch 1 fix/path-traversal |
 | 2026-11-15 | Antigravity | fix/path-traversal | CLI-01, CLI-02 | assertInside, source/name validation, path traversal regression tests green (160 pass, 1 skipped) | merge to main, start Branch 2 |
 | 2026-11-15 | Antigravity | fix/installation-and-packaging | CLI-03, CLI-04, CLI-05 | package.json scripts/files, install.sh rewrite with VERSION, doctor read-only, dead code removed | merge to main, start Branch 3 |
+| 2026-11-15 | Antigravity | fix/registry-token-safety | CLI-06, CLI-07 | origin-bound token, anonymous endpoint safety, openBrowser shell injection protection, login env var (164 pass, 1 skipped) | merge to main, start Branch 4 |
 
 ---
 
