@@ -39,6 +39,16 @@ export async function removeCommand(name: string): Promise<void> {
 
   // Update lockfile
   const lockfile = await readLockfile();
+  const entry = lockfile.skills[name];
+  if (entry?.syncedTargets) {
+    for (const targetPath of entry.syncedTargets) {
+      try {
+        await rm(targetPath, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  }
   const updatedLockfile = removeLockEntry(lockfile, name);
 
   // Prune orphaned dependencies
@@ -48,9 +58,9 @@ export async function removeCommand(name: string): Promise<void> {
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    const entry = updatedLockfile.skills[current];
-    if (entry?.dependencies) {
-      for (const dep of Object.keys(entry.dependencies)) {
+    const currentEntry = updatedLockfile.skills[current];
+    if (currentEntry?.dependencies) {
+      for (const dep of Object.keys(currentEntry.dependencies)) {
         if (!reachable.has(dep)) {
           reachable.add(dep);
           queue.push(dep);
@@ -61,6 +71,16 @@ export async function removeCommand(name: string): Promise<void> {
 
   for (const lockedKey of Object.keys(updatedLockfile.skills)) {
     if (!reachable.has(lockedKey)) {
+      const orphanEntry = updatedLockfile.skills[lockedKey];
+      if (orphanEntry?.syncedTargets) {
+        for (const targetPath of orphanEntry.syncedTargets) {
+          try {
+            await rm(targetPath, { recursive: true, force: true });
+          } catch {
+            // ignore
+          }
+        }
+      }
       delete updatedLockfile.skills[lockedKey];
       const orphanDir = assertInside(skillsDir, join(skillsDir, toOnDiskName(lockedKey)));
       await rm(orphanDir, { recursive: true, force: true });
