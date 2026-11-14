@@ -171,16 +171,21 @@ describe("e2e", () => {
     // 1. Initialize
     await run(["init"], dir);
 
-    // 2. Install a GitHub skill using local mock server fixtures
+    // 2. Install a GitHub skill using local mock server fixtures with --target antigravity
     const installOut = await run(
-      ["install", "vercel-labs/skills/skills/find-skills"],
+      ["install", "vercel-labs/skills/skills/find-skills", "--target", "antigravity"],
       dir
     );
     expect(installOut).toContain("Installed find-skills");
 
-    // Check files exist
+    // Check files exist in .skills and in synced .agents/skills target
     const skillMdExists = existsSync(join(dir, ".skills", "find-skills", "SKILL.md"));
     expect(skillMdExists).toBe(true);
+
+    const antigravitySkillMdExists = existsSync(
+      join(dir, ".agents", "skills", "find-skills", "SKILL.md")
+    );
+    expect(antigravitySkillMdExists).toBe(true);
 
     // Check lockfile and skills.json exist
     const lockfileRaw = JSON.parse(
@@ -195,6 +200,7 @@ describe("e2e", () => {
     // 4. Remove
     const removeOut = await run(["remove", "find-skills"], dir);
     expect(removeOut).toContain("Removed find-skills");
+    expect(existsSync(join(dir, ".agents", "skills", "find-skills"))).toBe(false);
 
     // 5. List again — should be empty
     const listOutEmpty = await run(["list"], dir);

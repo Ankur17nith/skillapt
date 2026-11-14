@@ -126,6 +126,30 @@ describe("install targets", () => {
     expect(resolveTargetDir("antigravity-cli", false, tempDir)).toBe(customDir);
   });
 
+  it("honors SKILLAPT_<TARGET>_DIR overrides for all targets", () => {
+    const claudeDir = join(tempDir, "custom-claude");
+    const cursorDir = join(tempDir, "custom-cursor");
+    const codexDir = join(tempDir, "custom-codex");
+    const agCliDir = join(tempDir, "custom-ag-cli");
+
+    process.env.SKILLAPT_CLAUDE_DIR = claudeDir;
+    process.env.SKILLAPT_CURSOR_DIR = cursorDir;
+    process.env.SKILLAPT_CODEX_DIR = codexDir;
+    process.env.SKILLAPT_ANTIGRAVITY_CLI_DIR = agCliDir;
+
+    try {
+      expect(resolveTargetDir("claude", false, tempDir)).toBe(claudeDir);
+      expect(resolveTargetDir("cursor", false, tempDir)).toBe(cursorDir);
+      expect(resolveTargetDir("codex", false, tempDir)).toBe(codexDir);
+      expect(resolveTargetDir("antigravity-cli", false, tempDir)).toBe(agCliDir);
+    } finally {
+      delete process.env.SKILLAPT_CLAUDE_DIR;
+      delete process.env.SKILLAPT_CURSOR_DIR;
+      delete process.env.SKILLAPT_CODEX_DIR;
+      delete process.env.SKILLAPT_ANTIGRAVITY_CLI_DIR;
+    }
+  });
+
   it("replaces existing destination cleanly on re-sync", async () => {
     // Sync once
     await syncSkillToTarget({
