@@ -221,8 +221,17 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
       try {
         const raw = await readFile(join(sourceDir, "skill.json"), "utf-8");
         const json = JSON.parse(raw);
-        if (typeof json.name === "string" && isValidRegistryName(json.name.trim())) {
-          effectiveName = json.name.trim();
+        if (typeof json.name === "string") {
+          const candidate = json.name.trim();
+          if (isValidRegistryName(candidate)) {
+            effectiveName = candidate;
+          } else {
+            console.warn(
+              pc.yellow(
+                `Warning: invalid skill.json name "${json.name}". Using default folder name "${name}".`
+              )
+            );
+          }
         }
       } catch {
         try {

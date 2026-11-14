@@ -28,8 +28,14 @@ export async function moveDir(src: string, dest: string): Promise<void> {
  * Returns the resolved candidate path.
  */
 export function assertInside(baseDir: string, candidate: string): string {
+  if (!candidate || candidate.trim() === "") {
+    throw new Error(
+      `Security: path "${candidate}" escapes base directory "${baseDir}".`
+    );
+  }
+  const normalizedCandidate = candidate.replace(/\\/g, "/");
   const resolvedBase = resolve(baseDir);
-  const resolvedCandidate = resolve(baseDir, candidate);
+  const resolvedCandidate = resolve(baseDir, normalizedCandidate);
   const prefix = resolvedBase.endsWith(sep) ? resolvedBase : resolvedBase + sep;
 
   if (
