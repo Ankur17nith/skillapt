@@ -52,10 +52,10 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/install-lockfile-update-logic complete) |
-| Current milestone | M2: Correct behavior |
-| Current branch | fix/install-lockfile-update-logic |
-| Current task | CLI-14, CLI-15, CLI-16, CLI-17, CLI-18 complete |
+| Last updated | 2026-11-15 (fix/pack-publish complete) |
+| Current milestone | M3: pack/publish, tests, CI, docs |
+| Current branch | fix/pack-publish |
+| Current task | CLI-19, CLI-20 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
 | Baseline tests | 176 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
@@ -273,9 +273,9 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 ### M3. pack/publish, tests, CI, docs
 
 #### Branch `fix/pack-publish`
-- [ ] **CLI-19** (A-11) Write tarballs outside the source tree (default `./dist` or OS temp); always exclude `*.tgz`, `node_modules`, output dir; `mkdir -p` the out dir; allow extensionless LICENSE/NOTICE/README/CHANGELOG/Makefile and the extended text types of §3.4; reject `..` only as a path segment; sort entries for reproducible tarballs (same input => same sha256); replace `parseFrontmatter` with the `yaml` package.
+- [x] **CLI-19** (A-11) Write tarballs outside the source tree (default `./dist` or OS temp); always exclude `*.tgz`, `node_modules`, output dir; `mkdir -p` the out dir; allow extensionless LICENSE/NOTICE/README/CHANGELOG/Makefile and the extended text types of §3.4; reject `..` only as a path segment; sort entries for reproducible tarballs (same input => same sha256); replace `parseFrontmatter` with the `yaml` package.
   V: pack twice succeeds with identical sha256; LICENSE and `.html` packable; block-scalar description parses.
-- [ ] **CLI-20** `publish <file.tgz>` runs the same local validation before upload; `--registry` never reuses a stored token for another origin (see CLI-06).
+- [x] **CLI-20** `publish <file.tgz>` runs the same local validation before upload; `--registry` never reuses a stored token for another origin (see CLI-06).
 
 #### Branch `chore/tests-and-ci`
 - [ ] **CLI-21** (A-13) e2e tests use a local mock registry and recorded/mock GitHub responses; keep one opt-in live test behind `SKILLAPT_LIVE=1`; add `pretest` (or vitest globalSetup) that builds `dist`.
@@ -355,6 +355,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | feat/antigravity-target | CLI-11, CLI-12 | single TARGET_CONFIGS table, antigravity & antigravity-cli, legacy fallback notice, env override SKILLAPT_<TARGET>_DIR, e2e tests (173 pass, 1 skipped) | merge to main, start Branch 6 |
 | 2026-11-15 | Antigravity | fix/scoped-names-and-target-layout | CLI-13 | flat on-disk folder layout (scope--name), D-004 SKILL.md name match without rewriting, lockfile records folder, collision rejection (175 pass, 1 skipped) | merge to main, start Branch 7 |
 | 2026-11-15 | Antigravity | fix/install-lockfile-update-logic | CLI-14..CLI-18 | lockfile sync, diamond resolver, syncedTargets tracking, frozen validation, outdated exit code (176 pass, 1 skipped) | merge to main, start Branch 8 |
+| 2026-11-15 | Antigravity | fix/pack-publish | CLI-19, CLI-20 | reproducible packaging, yaml frontmatter parser, outDir exclusion, tarball publish validation (176 pass, 1 skipped) | merge to main, start Branch 9 |
 
 ---
 
