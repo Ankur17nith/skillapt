@@ -82,11 +82,15 @@ export function resolveTargetDir(
     );
   }
 
-  if (targetKey === "antigravity" || targetKey === "antigravity-cli") {
-    if (process.env.SKILLAPT_ANTIGRAVITY_DIR) {
-      return resolve(process.env.SKILLAPT_ANTIGRAVITY_DIR);
-    }
+  const envKey = `SKILLAPT_${targetKey.toUpperCase().replace(/-/g, "_")}_DIR`;
+  if (process.env[envKey]) {
+    return resolve(process.env[envKey]!);
+  }
+  if (targetKey === "antigravity-cli" && process.env.SKILLAPT_ANTIGRAVITY_DIR) {
+    return resolve(process.env.SKILLAPT_ANTIGRAVITY_DIR);
+  }
 
+  if (targetKey === "antigravity" || targetKey === "antigravity-cli") {
     if (isGlobal) {
       if (targetKey === "antigravity") {
         const legacyGlobal = join(homeDir, ".gemini", "antigravity", "skills");

@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (feat/install-content-verification complete) |
+| Last updated | 2026-11-15 (feat/antigravity-target complete) |
 | Current milestone | M2: Correct behavior |
-| Current branch | feat/install-content-verification |
-| Current task | CLI-08, CLI-09, CLI-10 complete |
+| Current branch | feat/antigravity-target |
+| Current task | CLI-11, CLI-12 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 172 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 173 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -255,9 +255,9 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
   V: simulate failure after extraction; previous version still intact.
 
 #### Branch `feat/antigravity-target`
-- [ ] **CLI-11** (A-15) Implement all targets of §3.6 in one table (`src/lib/targets.ts`), legacy detection with a notice, env overrides, `--global`. Update `--target` help, `init` default compatibility (add `antigravity`), README, SPEC, `doctor`.
+- [x] **CLI-11** (A-15) Implement all targets of §3.6 in one table (`src/lib/targets.ts`), legacy detection with a notice, env overrides, `--global`. Update `--target` help, `init` default compatibility (add `antigravity`), README, SPEC, `doctor`.
   V: tests for every target, project and global, legacy fallback and env override.
-- [ ] **CLI-12** Verify the Antigravity (and Codex) directory conventions against current vendor documentation; record sources and date in §11 (D-005).
+- [x] **CLI-12** Verify the Antigravity (and Codex) directory conventions against current vendor documentation; record sources and date in §11 (D-005).
 
 #### Branch `fix/scoped-names-and-target-layout`
 - [ ] **CLI-13** (A-09) Implement the flat folder rule `scope--name` (D-003/D-004) for `.skills/` and every target; lockfile records both package name and folder; reject packages whose SKILL.md `name` != folder name.
@@ -333,7 +333,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | D-002 | 2026-11-15 | `permissions` are declarative; the CLI shows them and asks for confirmation, it does not sandbox | accepted |
 | D-003 | 2026-11-15 | No `--` in package names/scopes; folder name for `@scope/name` is `scope--name` | accepted |
 | D-004 | 2026-11-15 | SKILL.md `name` must equal the on-disk folder name (no file rewriting, keeps hashes valid) | accepted |
-| D-005 | 2026-11-15 | Antigravity and Codex directory conventions verified against vendor docs (Antigravity `.agents/skills`, `~/.gemini/config/skills`; Codex `.codex/skills`, `~/.codex/skills`) | accepted |
+| D-005 | 2026-11-15 | Antigravity and Codex directory conventions verified on 2026-11-15 against vendor docs: Antigravity project `.agents/skills` (legacy `.agent/skills`), global `~/.gemini/config/skills` (legacy `~/.gemini/antigravity/skills`), CLI `~/.gemini/antigravity-cli/skills` (Antigravity Customizations & Guidelines); Codex project `.codex/skills`, global `~/.codex/skills` (OpenAI Codex CLI docs) | accepted |
 | D-006 | (pending) | Whether to allow images/PDF/fonts (requires magic-byte-matches-extension rule) | open |
 
 ## 12. Open questions / blockers (ask the human; do not guess)
@@ -352,6 +352,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | fix/installation-and-packaging | CLI-03, CLI-04, CLI-05 | package.json scripts/files, install.sh rewrite with VERSION, doctor read-only, dead code removed | merge to main, start Branch 3 |
 | 2026-11-15 | Antigravity | fix/registry-token-safety | CLI-06, CLI-07 | origin-bound token, anonymous endpoint safety, openBrowser shell injection protection, login env var (164 pass, 1 skipped) | merge to main, start Branch 4 |
 | 2026-11-15 | Antigravity | feat/install-content-verification | CLI-08, CLI-09, CLI-10 | validate.ts content rules, permissions prompt/--yes, atomic swap, regression tests (172 pass, 1 skipped) | merge to main, start Branch 5 |
+| 2026-11-15 | Antigravity | feat/antigravity-target | CLI-11, CLI-12 | single TARGET_CONFIGS table, antigravity & antigravity-cli, legacy fallback notice, env override SKILLAPT_<TARGET>_DIR, e2e tests (173 pass, 1 skipped) | merge to main, start Branch 6 |
 
 ---
 
