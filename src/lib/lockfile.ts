@@ -15,6 +15,7 @@ export interface LockEntry {
   category?: string;
   permissions?: unknown;
   dependencies?: Record<string, string>;
+  syncedTargets?: string[];
 }
 
 export interface Lockfile {

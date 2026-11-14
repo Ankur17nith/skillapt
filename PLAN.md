@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/scoped-names-and-target-layout complete) |
+| Last updated | 2026-11-15 (fix/install-lockfile-update-logic complete) |
 | Current milestone | M2: Correct behavior |
-| Current branch | fix/scoped-names-and-target-layout |
-| Current task | CLI-13 complete |
+| Current branch | fix/install-lockfile-update-logic |
+| Current task | CLI-14, CLI-15, CLI-16, CLI-17, CLI-18 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 175 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 176 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -264,11 +264,11 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
   V: install `@alice/pdf-tool` -> `.skills/alice--pdf-tool` and `<target>/alice--pdf-tool`; collision test with an unscoped `alice--pdf-tool` is impossible because `--` is banned.
 
 #### Branch `fix/install-lockfile-update-logic`
-- [ ] **CLI-14** (A-06) `update` passes the manifest `ref` for GitHub skills, re-syncs targets, accepts `--target/--global`.
-- [ ] **CLI-15** (A-07) `install` with no args installs lockfile entries AND manifest entries missing from the lockfile (then rewrites the lockfile); `--frozen` fails on missing entries, on a locked version outside the manifest range, and on any entry lacking sha/sha256 (never use `entry.sha!`).
-- [ ] **CLI-16** (A-10) Manifest-fallback install honors `--target/--global`; `remove` deletes synced target copies/symlinks and prunes orphaned dependencies (track synced paths in the lockfile).
-- [ ] **CLI-17** (A-08) Resolver: resolve children after swapping to a common version; exclude `removed` (and prefer non-yanked) in `findCommonVersion`; treat `latest` as `*` everywhere; enforce depth 10; test cycles and diamonds.
-- [ ] **CLI-18** (A-12) `outdated` reports unreachable skills per item and exits non-zero instead of claiming up to date.
+- [x] **CLI-14** (A-06) `update` passes the manifest `ref` for GitHub skills, re-syncs targets, accepts `--target/--global`.
+- [x] **CLI-15** (A-07) `install` with no args installs lockfile entries AND manifest entries missing from the lockfile (then rewrites the lockfile); `--frozen` fails on missing entries, on a locked version outside the manifest range, and on any entry lacking sha/sha256 (never use `entry.sha!`).
+- [x] **CLI-16** (A-10) Manifest-fallback install honors `--target/--global`; `remove` deletes synced target copies/symlinks and prunes orphaned dependencies (track synced paths in the lockfile).
+- [x] **CLI-17** (A-08) Resolver: resolve children after swapping to a common version; exclude `removed` (and prefer non-yanked) in `findCommonVersion`; treat `latest` as `*` everywhere; enforce depth 10; test cycles and diamonds.
+- [x] **CLI-18** (A-12) `outdated` reports unreachable skills per item and exits non-zero instead of claiming up to date.
 
 ### M3. pack/publish, tests, CI, docs
 
@@ -354,6 +354,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | feat/install-content-verification | CLI-08, CLI-09, CLI-10 | validate.ts content rules, permissions prompt/--yes, atomic swap, regression tests (172 pass, 1 skipped) | merge to main, start Branch 5 |
 | 2026-11-15 | Antigravity | feat/antigravity-target | CLI-11, CLI-12 | single TARGET_CONFIGS table, antigravity & antigravity-cli, legacy fallback notice, env override SKILLAPT_<TARGET>_DIR, e2e tests (173 pass, 1 skipped) | merge to main, start Branch 6 |
 | 2026-11-15 | Antigravity | fix/scoped-names-and-target-layout | CLI-13 | flat on-disk folder layout (scope--name), D-004 SKILL.md name match without rewriting, lockfile records folder, collision rejection (175 pass, 1 skipped) | merge to main, start Branch 7 |
+| 2026-11-15 | Antigravity | fix/install-lockfile-update-logic | CLI-14..CLI-18 | lockfile sync, diamond resolver, syncedTargets tracking, frozen validation, outdated exit code (176 pass, 1 skipped) | merge to main, start Branch 8 |
 
 ---
 

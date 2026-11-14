@@ -254,6 +254,9 @@ async function syncTargets(
   const targets = options.target.split(",").map((t) => t.trim()).filter(Boolean);
   const skillsDir = getSkillsDir();
 
+  let lockfile = await readLockfile();
+  let lockfileChanged = false;
+
   for (const target of targets) {
     for (const name of skillNames) {
       const sourceDir = join(skillsDir, toOnDiskName(name));
@@ -266,7 +269,17 @@ async function syncTargets(
       console.log(
         `${pc.green("✓")} Synced ${pc.bold(name)} to ${pc.cyan(res.target)} (${res.mode}: ${pc.dim(res.targetPath)})`
       );
+      if (lockfile.skills[name]) {
+        const current = new Set(lockfile.skills[name].syncedTargets ?? []);
+        current.add(res.targetPath);
+        lockfile.skills[name].syncedTargets = Array.from(current);
+        lockfileChanged = true;
+      }
     }
+  }
+
+  if (lockfileChanged) {
+    await writeLockfile(lockfile);
   }
 }
 
@@ -358,10 +371,13 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
         const sourceStr = entry.subpath ? `${entry.source}/${entry.subpath}` : entry.source;
         console.log(`→ ${pc.bold(name)} ${pc.dim(`(${sourceStr})`)} [locked]`);
 
+        if (!entry.sha) {
+          throw new Error(`Lockfile entry for "${name}" is missing commit sha.`);
+        }
         const tarball = await downloadTarball(
           entry.source.split("/")[0],
           entry.source.split("/")[1],
-          entry.sha!
+          entry.sha
         );
 
         await extractSkill({

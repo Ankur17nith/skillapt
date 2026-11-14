@@ -270,4 +270,36 @@ describe("DependencyResolver", () => {
       "Dependency resolution exceeded maximum depth limit of 10 levels."
     );
   });
+
+  it("resolves diamond dependencies cleanly", async () => {
+    const mockRegistry: Record<string, SkillDetail> = {
+      app: makeDetail("app", {
+        "1.0.0": { dependencies: { "dep-b": "^1.0.0", "dep-c": "^1.0.0" } },
+      }),
+      "dep-b": makeDetail("dep-b", {
+        "1.0.0": { dependencies: { "dep-d": "^1.0.0" } },
+      }),
+      "dep-c": makeDetail("dep-c", {
+        "1.0.0": { dependencies: { "dep-d": ">=1.2.0 <2.0.0" } },
+      }),
+      "dep-d": makeDetail("dep-d", {
+        "1.0.0": { dependencies: {} },
+        "1.2.5": { dependencies: {} },
+      }),
+    };
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockImplementation(async (name) => {
+      const res = mockRegistry[name];
+      if (!res) throw new Error(`Not found: ${name}`);
+      return res;
+    });
+
+    const resolver = new DependencyResolver(client);
+    const result = await resolver.resolve("app");
+    expect(result.packages.get("dep-d")?.version).toBe("1.2.5");
+    const orderNames = result.installOrder.map((p) => p.name);
+    expect(orderNames.indexOf("dep-d")).toBeLessThan(orderNames.indexOf("dep-b"));
+    expect(orderNames.indexOf("dep-d")).toBeLessThan(orderNames.indexOf("dep-c"));
+  });
 });
