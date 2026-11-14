@@ -467,11 +467,6 @@ export class RegistryClient {
   // ── Private HTTP Helpers ──
 
   private encodePackageName(name: string): string {
-    // If scoped (e.g. @acme/foo), openapi specifies URL encoded or raw:
-    // Encode slash as %2F if scoped, or let router handle:
-    if (name.startsWith("@")) {
-      return encodeURIComponent(name);
-    }
     return encodeURIComponent(name);
   }
 

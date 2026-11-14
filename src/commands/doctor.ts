@@ -1,4 +1,6 @@
-import { access, constants, mkdir } from "node:fs/promises";
+import { access, constants } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import pc from "picocolors";
 import semver from "semver";
 import { getRegistryUrl, getSkillsDir } from "../lib/config.js";
@@ -80,16 +82,22 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<boolea
     details: userDetails,
   });
 
-  // 4. Check Skills Directory
+  // 4. Check Skills Directory (Read-only check, does not create directory)
   const skillsDir = getSkillsDir();
   let dirOk = false;
   let dirMsg = "";
 
   try {
-    await mkdir(skillsDir, { recursive: true });
-    await access(skillsDir, constants.R_OK | constants.W_OK);
-    dirOk = true;
-    dirMsg = `${skillsDir} (writable)`;
+    if (existsSync(skillsDir)) {
+      await access(skillsDir, constants.R_OK | constants.W_OK);
+      dirOk = true;
+      dirMsg = `${skillsDir} (exists, writable)`;
+    } else {
+      const parentDir = resolve(skillsDir, "..");
+      await access(parentDir, constants.R_OK | constants.W_OK);
+      dirOk = true;
+      dirMsg = `${skillsDir} (not created yet; parent directory is writable)`;
+    }
   } catch (err: unknown) {
     dirOk = false;
     dirMsg = `${skillsDir} (cannot access or write: ${err instanceof Error ? err.message : String(err)})`;

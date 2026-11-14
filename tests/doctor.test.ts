@@ -76,4 +76,34 @@ describe("doctor command", () => {
     const regCheck = parsed.checks.find((c: { name: string }) => c.name === "Registry service");
     expect(regCheck.ok).toBe(false);
   });
+
+  it("doctor is read-only and does not create .skills directory if it does not exist", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { existsSync } = await import("node:fs");
+
+    const tmpDir = await mkdtemp(join(tmpdir(), "skillapt-doctor-test-"));
+    const skillsDir = join(tmpDir, ".skills");
+    process.env.SKILLAPT_DIR = skillsDir;
+
+    try {
+      vi.spyOn(auth, "getAuthToken").mockResolvedValue(null);
+      vi.spyOn(RegistryClient.prototype, "getHealth").mockResolvedValue({
+        status: "ok",
+        product: "skillapt",
+        version: "1.1.0",
+        timestamp: new Date().toISOString(),
+      });
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await doctorCommand({ json: true });
+
+      // Skills directory must NOT have been created by doctor
+      expect(existsSync(skillsDir)).toBe(false);
+    } finally {
+      delete process.env.SKILLAPT_DIR;
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
