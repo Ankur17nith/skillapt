@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/registry-token-safety complete) |
-| Current milestone | M1: Critical security and installability |
-| Current branch | fix/registry-token-safety |
-| Current task | CLI-06, CLI-07 complete |
+| Last updated | 2026-11-15 (feat/install-content-verification complete) |
+| Current milestone | M2: Correct behavior |
+| Current branch | feat/install-content-verification |
+| Current task | CLI-08, CLI-09, CLI-10 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 164 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 172 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -248,10 +248,10 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 ### M2. Correct behavior
 
 #### Branch `feat/install-content-verification`
-- [ ] **CLI-08** (A-05) Move the validation from `pack.ts` into a shared module (`src/lib/validate.ts`) implementing §3.4 (allowlist, banned types, hidden segments, magic bytes, duplicates NFC/case-insensitive, depth, counts, SKILL.md frontmatter with the `yaml` package). Run it on the extracted temp tree for registry installs (hard fail) and GitHub installs (warn by default, `--strict` to fail, `--allow-ext` to extend).
+- [x] **CLI-08** (A-05) Move the validation from `pack.ts` into a shared module (`src/lib/validate.ts`) implementing §3.4 (allowlist, banned types, hidden segments, magic bytes, duplicates NFC/case-insensitive, depth, counts, SKILL.md frontmatter with the `yaml` package). Run it on the extracted temp tree for registry installs (hard fail) and GitHub installs (warn by default, `--strict` to fail, `--allow-ext` to extend).
   V: fixtures for ELF-in-.py, MZ-in-.txt, `.claude/settings.json`, duplicate case paths, depth 11, missing SKILL.md name match.
-- [ ] **CLI-09** (A-05, S7) On install print declared permissions and whether `scripts/` exists; require confirmation (or `--yes`) when `shell` or `network` is true. Document that permissions are declarations.
-- [ ] **CLI-10** (S4) Extract to a temp dir and swap atomically; failed installs never delete the previous version.
+- [x] **CLI-09** (A-05, S7) On install print declared permissions and whether `scripts/` exists; require confirmation (or `--yes`) when `shell` or `network` is true. Document that permissions are declarations.
+- [x] **CLI-10** (S4) Extract to a temp dir and swap atomically; failed installs never delete the previous version.
   V: simulate failure after extraction; previous version still intact.
 
 #### Branch `feat/antigravity-target`
@@ -351,6 +351,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | fix/path-traversal | CLI-01, CLI-02 | assertInside, source/name validation, path traversal regression tests green (160 pass, 1 skipped) | merge to main, start Branch 2 |
 | 2026-11-15 | Antigravity | fix/installation-and-packaging | CLI-03, CLI-04, CLI-05 | package.json scripts/files, install.sh rewrite with VERSION, doctor read-only, dead code removed | merge to main, start Branch 3 |
 | 2026-11-15 | Antigravity | fix/registry-token-safety | CLI-06, CLI-07 | origin-bound token, anonymous endpoint safety, openBrowser shell injection protection, login env var (164 pass, 1 skipped) | merge to main, start Branch 4 |
+| 2026-11-15 | Antigravity | feat/install-content-verification | CLI-08, CLI-09, CLI-10 | validate.ts content rules, permissions prompt/--yes, atomic swap, regression tests (172 pass, 1 skipped) | merge to main, start Branch 5 |
 
 ---
 

@@ -36,6 +36,7 @@ export interface InstallOptions {
   target?: string;
   global?: boolean;
   yes?: boolean;
+  strict?: boolean;
   allowExt?: string[];
 }
 
@@ -62,6 +63,7 @@ export async function installSingle(
     target?: string;
     global?: boolean;
     yes?: boolean;
+    strict?: boolean;
     allowExt?: string[];
   }
 ): Promise<void> {
@@ -81,6 +83,7 @@ async function installGitHub(
     target?: string;
     global?: boolean;
     yes?: boolean;
+    strict?: boolean;
     allowExt?: string[];
   }
 ): Promise<void> {
@@ -111,6 +114,7 @@ async function installGitHub(
     subpath: parsed.subpath,
     allowExt: options?.allowExt,
     isGitHub: true,
+    strict: options?.strict,
     yes: options?.yes,
   });
 

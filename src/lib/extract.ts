@@ -32,6 +32,7 @@ export interface ExtractSkillOptions {
   expectedSha256?: string;
   allowExt?: string[];
   isGitHub?: boolean;
+  strict?: boolean;
   yes?: boolean;
 }
 
@@ -56,7 +57,7 @@ export interface ExtractSkillOptions {
  * 15. Cleans up temp directories on error.
  */
 export async function extractSkill(options: ExtractSkillOptions): Promise<string> {
-  const { tarballStream, name, skillsDir, subpath, expectedSha256, allowExt, isGitHub, yes } = options;
+  const { tarballStream, name, skillsDir, subpath, expectedSha256, allowExt, isGitHub, strict, yes } = options;
 
   // Validate skill name to prevent path traversal
   validateSkillTargetName(name);
@@ -251,6 +252,7 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
       expectedName: effectiveName,
       allowExt,
       isGitHub,
+      strict,
     });
 
     if (isGitHub && treeResult.skippedFiles.length > 0) {
