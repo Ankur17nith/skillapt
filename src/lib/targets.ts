@@ -218,7 +218,7 @@ export async function removeSkillFromTargets(
     for (const glob of globalModes) {
       try {
         const baseDir = resolveTargetDir(targetKey, glob, projectRoot);
-        const targetPath = join(baseDir, onDiskName);
+        const targetPath = assertInside(baseDir, join(baseDir, onDiskName));
         try {
           await lstat(targetPath);
           await rm(targetPath, { recursive: true, force: true });

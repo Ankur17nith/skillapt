@@ -6,6 +6,9 @@ function getCodeloadBase(): string {
   return process.env.SKILLAPT_GITHUB_CODELOAD_BASE || "https://codeload.github.com";
 }
 
+/** Network timeout for GitHub requests (headers phase; tarball size is capped by the extractor). */
+const GITHUB_TIMEOUT_MS = 30_000;
+
 function authHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN;
   if (token) {
@@ -24,7 +27,7 @@ export async function resolveRef(
   ref?: string | null
 ): Promise<string> {
   const commitRef = ref ?? "HEAD";
-  const url = `${getApiBase()}/repos/${owner}/${repo}/commits/${encodeURIComponent(commitRef)}`;
+  const url = `${getApiBase()}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(commitRef)}`;
 
   const res = await fetch(url, {
     headers: {
@@ -32,6 +35,7 @@ export async function resolveRef(
       "User-Agent": "skillapt",
       ...authHeaders(),
     },
+    signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
   });
 
   if (res.status === 404) {
@@ -70,13 +74,17 @@ export async function downloadTarball(
   repo: string,
   sha: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const url = `${getCodeloadBase()}/${owner}/${repo}/tar.gz/${sha}`;
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    throw new Error("GitHub: refusing to download a tarball for a non-SHA reference.");
+  }
+  const url = `${getCodeloadBase()}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tar.gz/${sha}`;
 
   const res = await fetch(url, {
     headers: {
       "User-Agent": "skillapt",
       ...authHeaders(),
     },
+    signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
   });
 
   if (res.status === 404) {
