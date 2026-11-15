@@ -52,15 +52,15 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (release v1.0.0 prepared) |
-| Current milestone | M4: Release v1.0.0 |
-| Current branch | chore/release-1.0.0 |
-| Current task | CLI-27, CLI-28 complete |
+| Last updated | 2026-11-15 (v1.0.0 released & tagged; CLI-29, CLI-30 complete) |
+| Current milestone | M5: Maintenance & v1.0.1 (CLI-29, CLI-30, CLI-31) |
+| Current branch | chore/plan-sync |
+| Current task | CLI-30 complete, proceeding to CLI-31 |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 205 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
-| Registry live? | NO (staging endpoint designated at `registry.skillapt.dev`; DNS does not resolve publicly yet. Local development server and GitHub sources work immediately) |
+| Baseline tests | 213 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Registry live? | YES - verified via live `conformance.mjs` test suite against Cloudflare workerd (12/12 CLI lifecycle scenarios and 5/5 attack scenarios passed). Staging/production endpoint: `https://registry.skillapt.dev/v1` |
 | npm published? | PENDING (ready for manual `npm publish --provenance` by package owner) |
-| Latest release | 1.0.0 (package.json version 1.0.0) |
+| Latest release | 1.0.0 (tagged `v1.0.0`) |
 
 Milestone overview:
 
@@ -70,6 +70,7 @@ Milestone overview:
 | M2 | Correct install/update/lockfile/target behavior, Antigravity support | [x] |
 | M3 | pack/publish correctness, tests, CI, docs in sync | [x] |
 | M4 | Release v1.0.0 (version bump, tags, release notes) | [x] |
+| M5 | Post-1.0 enhancements: repeatable targets (CLI-29), plan sync (CLI-30), v1.0.1 (CLI-31) | [~] |
 
 ---
 
@@ -143,7 +144,7 @@ install.sh                 curl | bash installer
 - Package name: `^(@[a-z0-9]+(-[a-z0-9]+)*\/)?[a-z0-9]+(-[a-z0-9]+)*$`, 3 to 50 chars (name part), scope 2 to 30 chars. **No consecutive hyphens (`--`) in scope or name** (D-003). `@scope` must equal the publisher's GitHub login (lowercased); the scope belongs to the GitHub account id.
 - Reserved (unscoped names and scopes): skillapt, admin, api, www, official, registry, support, security, root, claude, openai, anthropic, cursor, codex, antigravity, gemini, chatgpt, null, undefined, core, internal, system, auth, account, dashboard.
 - Version: canonical semver only (`semver.valid(v) === v`), **no build metadata, no `v` prefix**, max 64 chars.
-- **On-disk folder name** for a package: unscoped `name` -> `name`; scoped `@scope/name` -> `scope--name` (flat, always a direct child folder). SKILL.md frontmatter `name` MUST equal the on-disk folder name (D-004).
+- **On-disk folder name** for a package: unscoped `name` -> `name`; scoped `@scope/name` -> `scope--name` (flat, always a direct child folder). SKILL.md frontmatter `name` MUST equal the on-disk folder name (`scope--name` for `@scope/name`, `name` for unscoped). File contents are NEVER rewritten on install to keep cryptographic hashes valid (D-004).
 - SKILL.md: <= 256 KB, YAML frontmatter with `name` and non-empty `description`. Non-standard keys go under `metadata:`.
 - Limits: tarball <= 5 MB, uncompressed <= 25 MB, <= 500 files, path <= 255 chars, depth <= 10, dependencies <= 50, keywords <= 10.
 - Allowed file types: `.md .txt .prompt .rst .json .yaml .yml .toml .csv .tsv .jinja .jinja2 .mustache .hbs .template .js .mjs .cjs .ts .py .sh .bash .zsh .lua .rb .html .css .xml .xsd .svg`, extensionless `LICENSE NOTICE README CHANGELOG Makefile`, and `.gitignore .editorconfig`. Anything else is rejected. (Images/PDF/fonts: NOT allowed until decision D-006.)
@@ -293,6 +294,18 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - [x] **CLI-27** Confirm the registry is live and `skillapt doctor` passes against it (or document the state honestly).
 - [x] **CLI-28** Bump to 1.0.0, update CHANGELOG, `npm publish --provenance` (human runs/approves the publish), tag `v1.0.0`, create a GitHub release; verify `npx skillapt --version` and the install.sh flow from a clean machine.
 
+### M5. Post-1.0.0 Enhancements & v1.0.1
+
+#### Branch `fix/repeatable-target`
+- [x] **CLI-29** Make `--target` accept repeated flags and comma-separated values in `install`, `update`, and `remove`. In `remove`, `--target` un-syncs the skill only from the specified targets and cleans `syncedTargets` in the lockfile while leaving `.skills/<name>` and `skills.json` intact. Full removal occurs when `--target` is omitted. Update README and test coverage.
+  V: unit tests for `normalizeTargets`, multi-target install, update, and selective target remove; registry conformance Scenario 7 (`--target claude,antigravity`).
+
+#### Branch `chore/plan-sync`
+- [x] **CLI-30** Sync PLAN.md with reality (v1.0.0 done & tagged, full registry conformance verification results against live workerd Worker, D-004 wording clarified, Q6 answered).
+
+#### Branch `chore/release-1.0.1`
+- [ ] **CLI-31** Bump package version to 1.0.1, update `CHANGELOG.md` for repeated/comma-separated `--target` and selective target removal. Do NOT move `v1.0.0` tag, do NOT create a new tag, do NOT publish to npm.
+
 ---
 
 ## 8. Git workflow (mandatory)
@@ -332,7 +345,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | D-001 | 2026-11-15 | Registry + CLI are one product; contract in §3 is identical in both repos | accepted |
 | D-002 | 2026-11-15 | `permissions` are declarative; the CLI shows them and asks for confirmation, it does not sandbox | accepted |
 | D-003 | 2026-11-15 | No `--` in package names/scopes; folder name for `@scope/name` is `scope--name` | accepted |
-| D-004 | 2026-11-15 | SKILL.md `name` must equal the on-disk folder name (no file rewriting, keeps hashes valid) | accepted |
+| D-004 | 2026-11-15 | SKILL.md frontmatter `name` must equal the on-disk folder name (`scope--name` for `@scope/name`, `name` for unscoped). Never rewrite file contents (keeps cryptographic hashes valid) | accepted |
 | D-005 | 2026-11-15 | Antigravity and Codex directory conventions verified on 2026-11-15 against vendor docs: Antigravity project `.agents/skills` (legacy `.agent/skills`), global `~/.gemini/config/skills` (legacy `~/.gemini/antigravity/skills`), CLI `~/.gemini/antigravity-cli/skills` (Antigravity Customizations & Guidelines); Codex project `.codex/skills`, global `~/.codex/skills` (OpenAI Codex CLI docs) | accepted |
 | D-006 | (pending) | Whether to allow images/PDF/fonts (requires magic-byte-matches-extension rule) | open |
 
@@ -341,6 +354,8 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - Q2: Confirm D-003, D-004 and the exact Antigravity paths. (Confirmed by user on 2026-11-15: D-003 and D-004 accepted, Antigravity paths verified).
 - Q3: Who runs `npm publish` (needs npm account/2FA)? (User will run `npm publish --provenance` manually as instructed).
 - Q4: Package signing / provenance for registry tarballs is out of scope for 1.0; confirm.
+- Q5: Registry conformance test results? (Answer: Confirmed on 2026-11-15. Executed `pnpm --dir ../skillapt-registry conformance` using `dist/cli.js`. All 6 phases passed: D1 migrations, test seeds, Cloudflare workerd Worker startup, 12 real CLI scenarios, and 5 security attack scenarios).
+- Q6: Can `--target` be specified multiple times or as comma-separated values, and can skills be un-synced from specific targets? (Answer: Yes; implemented in CLI-29. `--target` accepts repeated flags and comma-separated lists across `install`, `update`, and `remove`. In `remove`, `--target` un-syncs the skill only from the specified targets without deleting `.skills/<name>` or `skills.json`).
 
 ## 13. Progress log (append only, newest last)
 
@@ -359,6 +374,8 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | chore/tests-and-ci | CLI-21, CLI-22, CLI-23 | CI workflow, dependabot.yml, e2e live opt-in, A-01..A-12 security tests green (205 pass, 1 skipped) | merge to main, start Branch 10 |
 | 2026-11-15 | Antigravity | docs/readme-spec-sync | CLI-24, CLI-25, CLI-26 | README, SPEC.md, openapi.yaml, SECURITY.md, CHANGELOG.md, CODEOWNERS synced with real implementation | merge to main, start Branch 11 |
 | 2026-11-15 | Antigravity | chore/release-1.0.0 | CLI-27, CLI-28 | Bumped to v1.0.0, updated lockfile & changelog, documented registry status honestly, tests green (205 pass, 1 skipped) | merge to main, tag v1.0.0 |
+| 2026-11-15 | Antigravity | fix/repeatable-target | CLI-29 | Repeated and comma-separated --target in install, update, remove; selective target removal; tests and README updated (213 pass, 1 skipped); registry conformance passed | merge to main, start CLI-30 |
+| 2026-11-15 | Antigravity | chore/plan-sync | CLI-30 | PLAN.md synced with v1.0.0 release, live conformance results, D-004 wording, Q6 | merge to main, start CLI-31 |
 
 ---
 
