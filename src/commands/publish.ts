@@ -1,5 +1,5 @@
-import { readFile, stat, unlink } from "node:fs/promises";
-import { resolve, extname } from "node:path";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
+import { resolve, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import pc from "picocolors";
@@ -22,7 +22,7 @@ export async function publishCommand(
 ): Promise<PublishResponse> {
   const resolvedTarget = resolve(target);
   let tarballBuffer: Buffer;
-  let tempTarballPath: string | null = null;
+  let tempPackDir: string | null = null;
   let pkgName = "";
   let pkgVersion = "";
 
@@ -60,9 +60,11 @@ export async function publishCommand(
     pkgVersion = validated.manifest.version;
   } else {
     // Directory - pack first into OS temp
-    const packResult = await packSkill(resolvedTarget, tmpdir());
+    // Private (0700) temp dir: a predictable file name in the shared temp dir
+    // could be pre-created as a symlink by another local user.
+    tempPackDir = await mkdtemp(join(tmpdir(), "skillapt-publish-"));
+    const packResult = await packSkill(resolvedTarget, tempPackDir);
     tarballBuffer = packResult.tarballBuffer;
-    tempTarballPath = packResult.tarballPath;
     pkgName = packResult.manifest.name;
     pkgVersion = packResult.manifest.version;
   }
@@ -88,12 +90,8 @@ export async function publishCommand(
   } finally {
     // If we generated a tarball in a temporary run and didn't request keeping it, we can keep or delete
     // In npm, npm publish deletes the pack tarball if created on the fly unless specified
-    if (tempTarballPath && !options.keepTarball) {
-      try {
-        await unlink(tempTarballPath);
-      } catch {
-        // ignore cleanup error
-      }
+    if (tempPackDir && !options.keepTarball) {
+      await rm(tempPackDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }
