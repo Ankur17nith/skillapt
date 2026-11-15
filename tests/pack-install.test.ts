@@ -27,7 +27,7 @@ describe("package pack and install verification", () => {
       const consumerDir = join(tmpDir, "consumer");
       await mkdir(consumerDir, { recursive: true });
       execFileSync("npm", ["init", "-y"], { cwd: consumerDir, encoding: "utf-8" });
-      execFileSync("npm", ["install", "--no-save", tarballPath], {
+      execFileSync("npm", ["install", "--no-save", "--ignore-scripts", tarballPath], {
         cwd: consumerDir,
         encoding: "utf-8",
       });
