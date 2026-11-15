@@ -59,7 +59,7 @@ skillapt doctor
 | `SKILLAPT_DIR` | `.skills` | Project directory where skills are installed locally. |
 | `SKILLAPT_TOKEN` | *(none)* | Registry authentication token. Used for publishing, yanking, or accessing private registry endpoints. Tokens are origin-bound to the configured registry. |
 | `GITHUB_TOKEN` | *(none)* | GitHub personal access token used for GitHub API requests to avoid rate limits when installing GitHub-based skills. |
-| `SKILLAPT_ANTIGRAVITY_DIR` | *(none)* | Overrides the target directory path for the `antigravity` target. |
+| `SKILLAPT_<TARGET>_DIR` | *(none)* | Overrides the target directory path for a specific agent target (e.g. `SKILLAPT_ANTIGRAVITY_DIR`, `SKILLAPT_CLAUDE_DIR`, `SKILLAPT_CURSOR_DIR`, `SKILLAPT_CODEX_DIR`). |
 
 ---
 
@@ -246,8 +246,8 @@ skillapt pack ./my-skill --out ./dist
 skillapt pack --json
 ```
 Tarballs default to `./dist/` outside the source files. Enforces:
-- Extension allowlist (`.md`, `.txt`, `.json`, `.yaml`, `.html`, `.css`, `.xml`, `.xsd`, `.svg`, `.png`, `.jpg`, `.pdf`, and extensionless `LICENSE`, `NOTICE`, `README`, `Makefile`).
-- Rejects prohibited binaries (`.exe`, `.dll`, `.so`) and inspects magic bytes (ELF, Mach-O, Windows PE, Java class).
+- Extension allowlist (`.md`, `.txt`, `.prompt`, `.rst`, `.json`, `.yaml`, `.yml`, `.toml`, `.csv`, `.tsv`, `.jinja`, `.jinja2`, `.mustache`, `.hbs`, `.template`, `.js`, `.mjs`, `.cjs`, `.ts`, `.py`, `.sh`, `.bash`, `.zsh`, `.lua`, `.rb`, `.html`, `.css`, `.xml`, `.xsd`, `.svg`; extensionless `LICENSE`, `NOTICE`, `README`, `CHANGELOG`, `Makefile`; `.gitignore`, `.editorconfig`). All other extensions (including images and PDFs pending decision D-006) are rejected.
+- Rejects prohibited binaries (`.exe`, `.dll`, `.so`, `.dylib`) and inspects magic bytes (ELF, Mach-O, Windows PE MZ, Java class, WASM).
 - Reproducible tarballs: entries are sorted alphabetically and mtime timestamps are normalized to ensure identical SHA-256 for identical inputs.
 - Excludes `node_modules`, `*.tgz`, and the output directory from the package walk.
 

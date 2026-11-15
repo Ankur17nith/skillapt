@@ -899,26 +899,39 @@ components:
     SkillsManifest:
       type: object
       description: Format of consumer skills.json file in project root.
-      required:
-        - name
-        - skills
       properties:
-        name:
-          type: string
-          example: my-agent-workspace
-        version:
-          type: string
-          example: 1.0.0
-        description:
-          type: string
-          example: Customer support AI agent workspace
         skills:
           type: object
+          description: Mapping of skill name to its source configuration.
           additionalProperties:
-            type: string
+            type: object
+            required:
+              - source
+            properties:
+              source:
+                type: string
+                example: pdf-summarizer
+              version:
+                type: string
+                example: ^1.2.0
+              ref:
+                type: string
+                nullable: true
+                example: main
+              subpath:
+                type: string
+                nullable: true
+                example: skills/summarizer
           example:
-            pdf-summarizer: ^1.2.0
-            "@acme/classifier": ~2.0.0
+            pdf-summarizer:
+              source: pdf-summarizer
+              version: ^1.2.0
+            "@alice/pdf-tool":
+              source: "@alice/pdf-tool"
+              version: ~2.0.0
+            find-skills:
+              source: vercel-labs/skills
+              subpath: skills/find-skills
 
     SkillsLockfile:
       type: object
@@ -929,19 +942,17 @@ components:
       properties:
         lockfileVersion:
           type: integer
-          example: 1
+          example: 2
         skills:
           type: object
           additionalProperties:
             type: object
             required:
-              - version
-              - resolved
-              - integrity
-              - sha256
-              - permissions
-              - dependencies
+              - source
             properties:
+              source:
+                type: string
+                example: registry
               version:
                 type: string
                 example: 1.2.0
@@ -955,6 +966,17 @@ components:
               sha256:
                 type: string
                 example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+              sha:
+                type: string
+                description: GitHub commit SHA (for GitHub sources)
+                example: 1234567890abcdef1234567890abcdef12345678
+              subpath:
+                type: string
+                nullable: true
+              folder:
+                type: string
+                description: On-disk directory name (D-003, scope--name for scoped)
+                example: pdf-summarizer
               category:
                 $ref: '#/components/schemas/Category'
               permissions:
@@ -962,6 +984,10 @@ components:
               dependencies:
                 type: object
                 additionalProperties:
+                  type: string
+              syncedTargets:
+                type: array
+                items:
                   type: string
 
     User:

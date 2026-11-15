@@ -52,10 +52,10 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (chore/tests-and-ci complete) |
+| Last updated | 2026-11-15 (docs/readme-spec-sync complete) |
 | Current milestone | M3: pack/publish, tests, CI, docs |
-| Current branch | chore/tests-and-ci |
-| Current task | CLI-21, CLI-22, CLI-23 complete |
+| Current branch | docs/readme-spec-sync |
+| Current task | CLI-24, CLI-25, CLI-26 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
 | Baseline tests | 205 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
@@ -284,9 +284,9 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - [x] **CLI-23** Regression tests for every item A-01..A-12 (one test file per area under `tests/security/`).
 
 #### Branch `docs/readme-spec-sync`
-- [ ] **CLI-24** (A-14, A-17) README: replace "completely independent of npm" with "own skill registry, distributed via npm"; document env vars, all targets and paths, permissions semantics, threat model (prompt injection in SKILL.md, scripts, registry compromise; SHA-256 is integrity against the registry's own hash, not a signature); plain text instead of LaTeX; real example skills or placeholders clearly marked.
-- [ ] **CLI-25** docs/SPEC.md and openapi.yaml match the real code (`skills.json` shape, lockfileVersion 2, enforced vs planned checks). Anything not implemented is marked "planned".
-- [ ] **CLI-26** Add SECURITY.md (reporting address), CHANGELOG.md, CODEOWNERS.
+- [x] **CLI-24** (A-14, A-17) README: replace "completely independent of npm" with "own skill registry, distributed via npm"; document env vars, all targets and paths, permissions semantics, threat model (prompt injection in SKILL.md, scripts, registry compromise; SHA-256 is integrity against the registry's own hash, not a signature); plain text instead of LaTeX; real example skills or placeholders clearly marked.
+- [x] **CLI-25** docs/SPEC.md and openapi.yaml match the real code (`skills.json` shape, lockfileVersion 2, enforced vs planned checks). Anything not implemented is marked "planned".
+- [x] **CLI-26** Add SECURITY.md (reporting address), CHANGELOG.md, CODEOWNERS.
 
 ### M4. Release
 #### Branch `chore/release-1.0.0`
@@ -357,6 +357,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | fix/install-lockfile-update-logic | CLI-14..CLI-18 | lockfile sync, diamond resolver, syncedTargets tracking, frozen validation, outdated exit code (176 pass, 1 skipped) | merge to main, start Branch 8 |
 | 2026-11-15 | Antigravity | fix/pack-publish | CLI-19, CLI-20 | reproducible packaging, yaml frontmatter parser, outDir exclusion, tarball publish validation (176 pass, 1 skipped) | merge to main, start Branch 9 |
 | 2026-11-15 | Antigravity | chore/tests-and-ci | CLI-21, CLI-22, CLI-23 | CI workflow, dependabot.yml, e2e live opt-in, A-01..A-12 security tests green (205 pass, 1 skipped) | merge to main, start Branch 10 |
+| 2026-11-15 | Antigravity | docs/readme-spec-sync | CLI-24, CLI-25, CLI-26 | README, SPEC.md, openapi.yaml, SECURITY.md, CHANGELOG.md, CODEOWNERS synced with real implementation | merge to main, start Branch 11 |
 
 ---
 

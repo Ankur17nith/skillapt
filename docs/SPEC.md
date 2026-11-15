@@ -13,7 +13,7 @@
 
 An **agent skill** is a modular package that teaches an AI agent (such as Claude, Cursor, Codex, Antigravity, or custom LLM frameworks) how to perform specialized tasks. Skills provide instructions, prompt templates, schemas, and helper scripts that agents consume to accomplish workflows like document summarization, database queries, code refactoring, or security auditing.
 
-`skillapt` is **completely independent of npm**. It does not use npm packages, npm registries, `node_modules`, or npm lifecycle scripts. It provides a lightweight, sandboxed distribution format tailored for modern agentic AI architectures.
+`skillapt` is a package manager for AI agent skills with its own dedicated skill registry, distributed via npm. It discovers, resolves, installs, locks, packs, and publishes AI agent skills (for Claude, Cursor, Codex, Antigravity, and custom LLM frameworks) backed by registry and GitHub sources. It provides a lightweight, sandboxed distribution format tailored for modern agentic AI architectures.
 
 ### Core Architecture Principles
 1. **Zero Code Execution on Registry**: The registry never executes, builds, runs, or evaluates user code. Packages are inspected statically and served as static tarballs.
@@ -64,7 +64,7 @@ Every skill package is distributed as a gzip-compressed tar archive (`.tar.gz` o
 `SKILL.md` is the primary interface between the package and the consuming AI agent. It **MUST** begin with valid YAML frontmatter demarcated by triple dashes (`---`).
 
 - **Required Frontmatter Keys**:
-  - `name`: Must match the **unscoped** package name specified in `skill.json` (e.g. for package `@alice/pdf-tool`, frontmatter `name` must be `pdf-tool`).
+  - `name`: Must match the **on-disk folder name** (e.g. for package `@alice/pdf-tool`, on-disk folder and frontmatter `name` must be `alice--pdf-tool`; for unscoped `pdf-tool` it is `pdf-tool`). Never rewritten during extraction to preserve tarball SHA-256 hashes (D-004).
   - `description`: A clear, single-sentence summary of what the skill enables for the agent.
 - **Content Limits**:
   - Minimum size: 10 non-whitespace characters.
@@ -101,11 +101,15 @@ The registry inspects all entries in the tarball. Only safe, text-based, templat
 | **Data & Configuration** | `.json`, `.yaml`, `.yml`, `.toml`, `.csv`, `.tsv` |
 | **Templates** | `.jinja`, `.jinja2`, `.mustache`, `.hbs`, `.template` |
 | **Common Scripts** | `.js`, `.mjs`, `.cjs`, `.ts`, `.py`, `.sh`, `.bash`, `.zsh`, `.lua`, `.rb` |
+| **Web & Markup** | `.html`, `.css`, `.xml`, `.xsd`, `.svg` |
+| **Extensionless Documents** | `LICENSE`, `NOTICE`, `README`, `CHANGELOG`, `Makefile` |
 | **Allowed Special Dotfiles** | `.gitignore`, `.editorconfig` |
+
+*(Note: Image formats like `.png`, `.jpg`, and `.pdf` documents are rejected pending decision D-006).*
 
 **Strictly Prohibited & Rejected**:
 - **Binary Executables & Libraries**: `.exe`, `.dll`, `.so`, `.dylib`, `.bin`, `.elf`, `.macho`, `.com`.
-- **Content Signature Checking**: The registry inspects the initial 512 bytes of every file. Any file matching ELF (`0x7F 0x45 0x4C 0x46`), Mach-O (`0xFE 0xED 0xFA 0xCE/CF` or `0xCF 0xFA 0xED 0xFE`), Windows PE (`MZ` / `0x4D 0x5A`), or Java class magic bytes is **rejected immediately**, even if disguised with a `.py` or `.txt` extension.
+- **Content Signature Checking**: The registry inspects the initial 512 bytes of every file. Any file matching ELF (`0x7F 0x45 0x4C 0x46`), Mach-O (`0xFE 0xED 0xFA 0xCE/CF` or `0xCF 0xFA 0xED 0xFE`), Windows PE (`MZ` / `0x4D 0x5A`), Java class / Mach-O universal (`0xCA 0xFE 0xBA 0xBE`), or WebAssembly (`\0asm` / `0x00 0x61 0x73 0x6D`) magic bytes is **rejected immediately**, even if disguised with a `.py` or `.txt` extension.
 - **Nested Archives**: `.tar`, `.gz`, `.zip`, `.rar`, `.7z`, `.bz2`.
 - **Hidden Files**: Any file or directory starting with `.` other than `.gitignore` and `.editorconfig`.
 
@@ -154,7 +158,7 @@ The package manifest lives inside the archive root and governs package distribut
 
 | Field | Type | Required | Specification & Validation Rules |
 | :--- | :--- | :--- | :--- |
-| `name` | `string` | **Yes** | 3 to 50 characters. Lowercase letters (`a-z`), digits (`0-9`), and hyphens (`-`). Cannot start or end with a hyphen. May optionally have a scope prefix: `@<handle>/<name>`. Regex: `^(@[a-z0-9-]{2,30}\/)?[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$`. Must not be in the [Reserved Names](#53-reserved-names-list) list. |
+| `name` | `string` | **Yes** | 3 to 50 characters for name part, 2 to 30 characters for scope part. Lowercase letters (`a-z`), digits (`0-9`), and hyphens (`-`). Cannot contain double hyphens (`--`) in scope or name part (D-003). Scoped packages map to flat on-disk folders `scope--name`. Regex: `^(@[a-z0-9]+(-[a-z0-9]+)*\/)?[a-z0-9]+(-[a-z0-9]+)*$`. Must not be in the [Reserved Names](#53-reserved-names-list) list. |
 | `version` | `string` | **Yes** | Strict Semantic Versioning 2.0.0 (e.g. `1.0.0`, `2.1.0-beta.1`). **Build metadata (`+...`) is strictly rejected** to ensure release immutability and unambiguous version precedence. |
 | `description` | `string` | **Yes** | 10 to 300 characters. Plain text summary. |
 | `license` | `string` | **Yes** | Valid SPDX license identifier (e.g. `MIT`, `Apache-2.0`, `ISC`) or `UNLICENSED`. Max 50 characters. |
