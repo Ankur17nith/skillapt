@@ -6,11 +6,20 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
 
@@ -30,14 +39,19 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm test
-
       - name: Build
         run: npm run build
 
-      - name: Pack smoke test
+      - name: Run tests
+        run: npx vitest run
+
+      - name: Pack and install smoke test
         run: |
-          TARBALL=$(npm pack)
-          node dist/cli.js --version
-          node dist/cli.js --help
+          PACK_DIR="$(mktemp -d)"
+          npm pack --ignore-scripts --pack-destination "$PACK_DIR"
+          CONSUMER="$(mktemp -d)"
+          cd "$CONSUMER"
+          npm init -y >/dev/null
+          npm install --ignore-scripts "$PACK_DIR"/skillapt-*.tgz
+          npx --no-install skillapt --version
+          npx --no-install skillapt --help
