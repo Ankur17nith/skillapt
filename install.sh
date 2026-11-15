@@ -36,6 +36,10 @@ fi
 # 3. Determine package specifier
 PKG_SPEC="${PRODUCT_NAME}"
 if [ -n "${VERSION:-}" ]; then
+  if ! [[ "${VERSION}" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
+    echo "Error: VERSION must be a plain version or dist-tag (e.g. 1.0.0 or latest)." >&2
+    exit 1
+  fi
   PKG_SPEC="${PRODUCT_NAME}@${VERSION}"
   echo "Installing specific version: ${PKG_SPEC}..."
 else
