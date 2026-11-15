@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Minimum supported Node.js is now 22.12.0 (Node 20 is end-of-life and `commander` 15, `vitest` 5 and `tsup` 9 require it). CI now runs on Node 22 and 24.
 
+### Security
+- `skillapt remove` no longer deletes arbitrary paths listed in a lockfile's `syncedTargets`; only `<known agent target dir>/<skill>` is removed.
+- Gzip decompression is capped before tar parsing (decompression-bomb protection) and extraction never applies archive-supplied ownership.
+- Windows browser launch no longer goes through `cmd.exe` (URL `&` injection); existing config files are chmod `0600` before the token is written.
+- Registry client: https-only manual redirects (max 5, token dropped on origin change), response size caps, timers always cleared, zod validation of responses.
+- GitHub requests time out, path segments are URL-encoded and tarball downloads require a commit SHA.
+- Dependency names from registry metadata are validated before use in URLs/paths.
+
+### Added
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates, and a tag-triggered npm release workflow with provenance.
+- `npm audit` for production dependencies in CI.
+
+### Changed
+- No default registry: the CLI has no built-in registry URL until one is deployed. Configure `SKILLAPT_REGISTRY` (or `skillapt login`); `doctor` and GitHub installs work without one.
+- README rewritten; `SECURITY.md` now uses GitHub private advisories (the previous mailbox domain does not exist). Single `CODEOWNERS` in `.github/`.
+
 ### Fixed
 - Intermittent test failures caused by `npm pack` re-running `prepare` and deleting `dist/` while e2e tests were executing the CLI.
 - CI pack smoke test now installs the packed tarball into a clean project and runs the installed binary.

@@ -7,8 +7,12 @@ info:
     Skillapt is an independent package registry built for discovering, publishing, and
     managing immutable skill packages for AI agents (Claude, Cursor, Codex, Antigravity, etc.).
 servers:
-  - url: https://registry.skillapt.dev/v1
-    description: Production Registry
+  # TODO(deploy): replace with the real Cloudflare Workers URL once the registry is deployed.
+  - url: https://{worker}.workers.dev/v1
+    description: Self-hosted registry on Cloudflare Workers (no public default registry exists yet)
+    variables:
+      worker:
+        default: skillapt-registry
   - url: http://localhost:8787/v1
     description: Local Development Server
 

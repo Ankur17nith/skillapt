@@ -454,7 +454,7 @@ tests/               unit + offline e2e (mock registry) + tests/security/ (one f
 docs/                SPEC.md openapi.yaml (match the code)
 .github/workflows/ci.yml   .github/dependabot.yml
 install.sh  package.json (prepare/prepublishOnly)  README.md  PLAN.md
-SECURITY.md  CHANGELOG.md  CODEOWNERS  LICENSE
+SECURITY.md  CHANGELOG.md  .github/CODEOWNERS  LICENSE
 ```
 
 **skillapt-registry (Worker)**
@@ -471,7 +471,7 @@ tests/               unit + tests/security/ (every attack) + tests/fixtures/ + m
 docs/                SPEC.md openapi.yaml (match the code)
 wrangler.jsonc       env.production, routes, D1, R2, Durable Object binding
 .github/workflows/ci.yml (incl. pnpm smoke on workerd)  dependabot.yml
-README.md PLAN.md SECURITY.md CHANGELOG.md CODEOWNERS
+README.md PLAN.md SECURITY.md CHANGELOG.md .github/CODEOWNERS
 ```
 
 ### 16.5 What a working session looks like (illustrative)
