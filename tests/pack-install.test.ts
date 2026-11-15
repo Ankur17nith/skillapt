@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, cp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { readFileSync } from "node:fs";
@@ -14,9 +14,18 @@ describe("package pack and install verification", () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "skillapt-pack-install-test-"));
 
     try {
-      // 1. Run npm pack in rootDir, outputting tarball into tmpDir
+      // 1. Pack from a scripts-free copy of the package. Running `npm pack` in
+      // rootDir would trigger the `prepare` script (tsup with clean: true),
+      // deleting dist/ while other test files are executing it.
+      const stageDir = join(tmpDir, "stage");
+      await mkdir(stageDir, { recursive: true });
+      const { scripts: _scripts, ...stagedPkg } = pkgJson;
+      await writeFile(join(stageDir, "package.json"), JSON.stringify(stagedPkg, null, 2));
+      for (const entry of pkgJson.files as string[]) {
+        await cp(join(rootDir, entry), join(stageDir, entry), { recursive: true });
+      }
       const packOutput = execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", tmpDir], {
-        cwd: rootDir,
+        cwd: stageDir,
         encoding: "utf-8",
       }).trim();
       const lines = packOutput.split("\n").map((l) => l.trim()).filter(Boolean);
