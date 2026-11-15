@@ -4,6 +4,7 @@ import { join, resolve, normalize, isAbsolute, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 import { createInterface } from "node:readline";
 import pc from "picocolors";
 import { moveDir, assertInside } from "./fs.js";
@@ -23,6 +24,13 @@ export const MAX_FILE_COUNT = 500;
 
 /** Maximum file path length: 255 characters */
 export const MAX_PATH_LENGTH = 255;
+
+/**
+ * Upper bound for the decompressed tar stream: the payload limit plus generous room
+ * for tar headers/padding (512-byte header + up to 511 padding bytes per entry, long-name
+ * and PAX records, and the end-of-archive blocks).
+ */
+export const MAX_TAR_STREAM_SIZE = MAX_UNCOMPRESSED_SIZE + (MAX_FILE_COUNT * 4 + 8) * 1024;
 
 export interface ExtractSkillOptions {
   tarballStream: ReadableStream<Uint8Array>;
@@ -111,8 +119,22 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
 
   try {
     await mkdir(extractDir, { recursive: true });
-    const tarFile = join(tmpDir, "archive.tar.gz");
-    await writeFile(tarFile, tarballBuffer);
+    // Decompress with a hard output cap BEFORE handing anything to the tar parser so a
+    // gzip bomb (tiny input, gigabytes of padding) cannot exhaust CPU, memory or disk.
+    let tarBuffer: Buffer;
+    try {
+      tarBuffer = gunzipSync(tarballBuffer, { maxOutputLength: MAX_TAR_STREAM_SIZE });
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code === "ERR_BUFFER_TOO_LARGE") {
+        throw new Error(
+          `Security: tarball uncompressed size exceeds ${MAX_UNCOMPRESSED_SIZE} bytes (25 MB). Aborting.`
+        );
+      }
+      throw new Error("Invalid archive: expected a gzip-compressed tarball.");
+    }
+    const tarFile = join(tmpDir, "archive.tar");
+    await writeFile(tarFile, tarBuffer);
 
     let uncompressedBytes = 0;
     let fileCount = 0;
@@ -121,6 +143,8 @@ export async function extractSkill(options: ExtractSkillOptions): Promise<string
     await extract({
       file: tarFile,
       cwd: extractDir,
+      // Never chown to archive-supplied uid/gid (tar defaults this to true when run as root)
+      preserveOwner: false,
       onReadEntry(entry) {
         fileCount++;
         if (fileCount > MAX_FILE_COUNT) {
