@@ -2,6 +2,7 @@ import semver from "semver";
 import pc from "picocolors";
 import type { RegistryClient, SkillDetail, SkillVersionSummary } from "./registry.js";
 import { resolveSkillVersion } from "./semver.js";
+import { REGISTRY_NAME_REGEX } from "./source.js";
 
 export interface PackageRequirement {
   from: string;
@@ -77,6 +78,13 @@ export class DependencyResolver {
   ): Promise<void> {
     if (depth > 10) {
       throw new Error(`Dependency resolution exceeded maximum depth limit of 10 levels.`);
+    }
+
+    // Dependency names come from registry metadata: never trust them for URLs or paths.
+    if (name.length > 100 || name.includes("--") || !REGISTRY_NAME_REGEX.test(name)) {
+      throw new Error(
+        `Invalid dependency name "${name}" declared by ${requestedBy}. Installation aborted.`
+      );
     }
 
     const normalizedRange = requestedRange === "latest" ? "*" : requestedRange;

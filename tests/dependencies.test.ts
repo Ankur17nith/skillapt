@@ -303,3 +303,14 @@ describe("DependencyResolver", () => {
     expect(orderNames.indexOf("dep-d")).toBeLessThan(orderNames.indexOf("dep-c"));
   });
 });
+
+describe("dependency name validation", () => {
+  it("rejects dependency names that are not valid registry names", async () => {
+    const { DependencyResolver } = await import("../src/lib/dependencies.js");
+    const client = {
+      getSkill: async () => ({ name: "root-skill", latestVersion: "1.0.0", versions: {} }),
+    } as never;
+    const resolver = new DependencyResolver(client);
+    await expect(resolver.resolve("../../etc/passwd", "*")).rejects.toThrow(/Invalid dependency name/);
+  });
+});
