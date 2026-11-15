@@ -1,67 +1,109 @@
+<div align="center">
+
 # skillapt
 
-**A secure package manager for AI agent skills with its own skill registry, distributed via npm.**
+**A secure package manager for AI agent skills.**
+Install, lock, verify, pack and publish skills for Claude, Cursor, Codex, Antigravity and custom agents, from a registry or straight from GitHub.
 
+[![CI](https://github.com/Ankur17nith/skillapt/actions/workflows/ci.yml/badge.svg)](https://github.com/Ankur17nith/skillapt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-green.svg)](https://nodejs.org/)
+[![Security Policy](https://img.shields.io/badge/security-policy-brightgreen.svg)](SECURITY.md)
 
-`skillapt` manages AI agent skills with its own dedicated skill registry while being conveniently distributed via npm. It discovers, resolves, installs, locks, packs, and publishes AI agent skills (for Claude, Cursor, Codex, Antigravity, and custom LLM frameworks) backed by registry and GitHub sources.
+[Quick start](#-quick-start) · [Commands](#-command-reference) · [Security](#%EF%B8%8F-threat-model--security-posture) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
-> **Registry Status**: `https://registry.skillapt.dev` is the designated public endpoint for the hosted registry service, currently in staging (pending public deployment; does not resolve publicly yet). You can use GitHub skill sources immediately or configure a local/self-hosted registry via `SKILLAPT_REGISTRY`.
->
-> *(Note: Skill names like `pdf-summarizer` and `@alice/pdf-tool` in this documentation are placeholders for illustrative purposes. For a real skill from GitHub, see the GitHub install examples below).*
+</div>
+
+---
+
+## Why skillapt?
+
+AI agent skills (`SKILL.md` plus helper files) are effectively *prompts and code that your agent trusts*. Copy-pasting them from random repositories gives you no versioning, no integrity checks and no review step. `skillapt` treats skills the way a package manager treats libraries:
+
+- **Reproducible**: `skills.json` + `skills.lock.json`, with `install --frozen` for CI.
+- **Verified**: SHA-256 integrity checks before extraction, strict archive limits, no symlinks/devices, no lifecycle scripts, ever.
+- **Transparent**: declared permissions (`network`, `shell`, `filesystem`) are shown and need confirmation when elevated.
+- **Agent-aware**: sync installed skills into Claude, Cursor, Codex and Antigravity skill directories.
+- **Flexible sources**: a skillapt registry (self-hostable on free Cloudflare Workers) or any public GitHub repository.
+
+## The skillapt project
+
+| Repository | Purpose |
+| :--- | :--- |
+| **skillapt** (this repo) | The `skillapt` CLI, distributed via npm |
+| [skillapt-registry](https://github.com/Ankur17nith/skillapt-registry) | Registry API on Cloudflare Workers + D1 + R2 |
+| [skillapt-web](https://github.com/Ankur17nith/skillapt-web) | Website and documentation |
+
+> **Registry status**: no public hosted registry is running yet, and `skillapt` ships with **no default registry URL**.
+> GitHub installs work out of the box. To use a registry, deploy your own
+> ([skillapt-registry](https://github.com/Ankur17nith/skillapt-registry) runs on Cloudflare's free tier) and point the CLI at it with
+> `SKILLAPT_REGISTRY=https://<your-worker>.workers.dev/v1` (or run `skillapt login` once; the registry is remembered).
+> Skill names such as `pdf-summarizer` and `@alice/pdf-tool` in this document are illustrative placeholders.
 
 ---
 
 ## ⚡ Installation
 
-### Via Shell Script (Recommended)
-```bash
-curl -fsSL https://raw.githubusercontent.com/Ankur17nith/skillapt/main/install.sh | bash
-```
+Requires **Node.js 22.12 or newer**.
 
-### Via npm / npx
 ```bash
-# Run directly with npx
+# Run without installing
 npx skillapt install vercel-labs/skills/skills/find-skills
 
 # Or install globally
 npm install -g skillapt
 ```
 
-> **Requirement**: Node.js **22.12.0** or higher.
+Shell installer (checks Node.js and installs the same npm package; read it first at [`install.sh`](install.sh)):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ankur17nith/skillapt/main/install.sh | bash
+```
 
 ---
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Initialize a new skill package
+# 1. Scaffold a skill package (SKILL.md + skill.json) and/or a consumer skills.json
 skillapt init --name my-custom-skill
 
-# 2. Install a real skill from GitHub
+# 2. Install a skill from GitHub (no registry needed)
 skillapt install vercel-labs/skills/skills/find-skills
 
-# 3. Sync installed skill directly to your AI agent environment
-skillapt install vercel-labs/skills/skills/find-skills --target antigravity
+# 3. Sync it into your AI agent's skills directory
+skillapt install vercel-labs/skills/skills/find-skills --target claude
 
-# 4. Check your setup health
+# 4. Reproducible installs in CI
+skillapt install --frozen
+
+# 5. Check your setup
 skillapt doctor
 ```
 
 ---
 
-## 🌐 Environment Variables
+## 🌐 Configuration
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `SKILLAPT_REGISTRY` | `https://registry.skillapt.dev` | Base URL for the skillapt registry API. Must use HTTPS (HTTP permitted only for `localhost` and `127.0.0.1`). |
-| `SKILLAPT_DIR` | `.skills` | Project directory where skills are installed locally. |
-| `SKILLAPT_TOKEN` | *(none)* | Registry authentication token. Used for publishing, yanking, or accessing private registry endpoints. Tokens are origin-bound to the configured registry. |
-| `GITHUB_TOKEN` | *(none)* | GitHub personal access token used for GitHub API requests to avoid rate limits when installing GitHub-based skills. |
-| `SKILLAPT_<TARGET>_DIR` | *(none)* | Overrides the target directory path for a specific agent target (e.g. `SKILLAPT_ANTIGRAVITY_DIR`, `SKILLAPT_CLAUDE_DIR`, `SKILLAPT_CURSOR_DIR`, `SKILLAPT_CODEX_DIR`). |
+| `SKILLAPT_REGISTRY` | *(none)* | Registry base URL including `/v1`, e.g. `https://<worker>.workers.dev/v1`. HTTPS required (HTTP only for `localhost`, `127.0.0.1`, `[::1]`). If unset, the registry saved by `skillapt login` is used. |
+| `SKILLAPT_DIR` | `.skills` | Directory where skills are installed (also `--dir`). |
+| `SKILLAPT_TOKEN` | *(none)* | Registry API token. Only ever sent to the configured registry's origin. |
+| `GITHUB_TOKEN` | *(none)* | GitHub token for API requests (higher rate limits, private repos). |
+| `SKILLAPT_<TARGET>_DIR` | *(none)* | Override an agent target directory: `SKILLAPT_CLAUDE_DIR`, `SKILLAPT_CURSOR_DIR`, `SKILLAPT_CODEX_DIR`, `SKILLAPT_ANTIGRAVITY_DIR`, `SKILLAPT_ANTIGRAVITY_CLI_DIR`. |
+| `XDG_CONFIG_HOME` | `~/.config` | Location of `skillapt/config.json` (stored token and registry, mode `0600`). |
 
 ---
+
+## Registry vs GitHub sources
+
+| | Registry (`name[@range]`) | GitHub (`owner/repo[/subpath][@ref]`) |
+| :--- | :--- | :--- |
+| Versioning | SemVer ranges, yanking, dependencies | Pinned to a resolved commit SHA in the lockfile |
+| Integrity | SHA-256 from registry metadata, re-checked from the lockfile | Tarball fetched by commit SHA |
+| Content rules | Violations are errors | Violations are warnings (`--strict` makes them errors) |
+| Needs | A configured registry | Nothing (set `GITHUB_TOKEN` for rate limits) |
 
 ## 📖 Command Reference
 
@@ -331,28 +373,43 @@ When using and distributing AI agent skills, understand the following threat mod
 
 ---
 
-## 🛠️ Development & Testing
+---
 
-```bash
-# Clone repository
-git clone https://github.com/Ankur17nith/skillapt.git
-cd skillapt
+## ❓ FAQ & Troubleshooting
 
-# Install dependencies
-npm install
+**`No skillapt registry is configured`**: you used a registry command (`search`, `info`, registry installs, `login`, `publish`) with no registry set. Export `SKILLAPT_REGISTRY` or install from GitHub instead.
 
-# Run type check
-npm run typecheck
+**`GitHub API rate limit exceeded`**: set `GITHUB_TOKEN` (any token with no scopes works for public repos).
 
-# Run test suite (fully mocked e2e, no live GitHub calls)
-npm test
+**`Integrity check failed`**: the downloaded package does not match the hash in the registry or `skills.lock.json`. Nothing was installed. Do not bypass it; investigate the registry or lockfile change.
 
-# Build production bundle
-npm run build
-```
+**`requires elevated permissions ... Pass --yes`**: the skill declares `network` or `shell` access and you are not on an interactive terminal. Review the skill, then re-run with `--yes`.
+
+**Registry unreachable**: run `skillapt doctor` to see the exact URL, error and next steps.
+
+**Node.js version errors**: skillapt needs Node.js 22.12+ (Node 20 is end-of-life).
+
+**Where are credentials stored?** `~/.config/skillapt/config.json` (mode `0600`), bound to the registry origin they were issued for.
 
 ---
 
+## 🛠️ Development
+
+```bash
+git clone https://github.com/Ankur17nith/skillapt.git
+cd skillapt
+npm ci
+npm run typecheck
+npm test        # fully offline, mocked GitHub and registry
+npm run build
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, the PR checklist and the release process.
+
+## 🔒 Security
+
+Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
+
 ## 📄 License
 
-MIT © [Ankur Gupta](https://github.com/Ankur17nith)
+[MIT](LICENSE) © skillapt contributors
