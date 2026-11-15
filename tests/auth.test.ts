@@ -189,7 +189,7 @@ describe("auth", () => {
     await setStoredToken("secret_token_origin_a", "https://origin-a.example.com/v1");
 
     const mockFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: "1", handle: "origin-b-user" }), {
+      new Response(JSON.stringify({ name: "test-skill", latestVersion: "1.0.0", versions: {} }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })

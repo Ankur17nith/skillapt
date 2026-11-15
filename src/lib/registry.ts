@@ -1,6 +1,38 @@
 import { getRegistryUrl, validateRegistryUrl, PRODUCT_NAME } from "./config.js";
 import { getVersion } from "./banner.js";
 import { getAuthToken } from "./auth.js";
+import { z } from "zod";
+
+/** Maximum accepted size of a JSON/text response body from the registry. */
+export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+
+/** Maximum number of redirects followed for a single request. */
+export const MAX_REDIRECTS = 5;
+
+// ── Response schemas (lenient: unknown fields are allowed, shape-critical fields are required) ──
+
+const versionBase = {
+  version: z.string(),
+  sha256: z.string(),
+  integrity: z.string().optional(),
+  size: z.number().optional(),
+  tarballUrl: z.string().optional(),
+  dependencies: z.record(z.string(), z.string()).optional(),
+  yanked: z.boolean().optional(),
+  status: z.string().optional(),
+};
+const versionDetailSchema = z.looseObject({ name: z.string(), ...versionBase });
+const skillDetailSchema = z.looseObject({
+  name: z.string(),
+  latestVersion: z.string().nullable().optional(),
+  versions: z.record(z.string(), z.looseObject(versionBase)),
+});
+const searchSchema = z.looseObject({
+  skills: z.array(z.looseObject({ name: z.string() })),
+  pagination: z.looseObject({}).optional(),
+});
+const userSchema = z.looseObject({ handle: z.string() });
+const publishSchema = z.looseObject({ name: z.string(), version: z.string(), sha256: z.string() });
 
 // ── Types from openapi.yaml & SPEC.md ──
 
@@ -289,7 +321,7 @@ export class RegistryClient {
 
     const qs = params.toString();
     const endpoint = `/skills${qs ? `?${qs}` : ""}`;
-    return this.request<SearchSkillsResponse>(endpoint, { method: "GET", anonymous: true });
+    return this.request<SearchSkillsResponse>(endpoint, { method: "GET", anonymous: true }, searchSchema);
   }
 
   /**
@@ -297,7 +329,7 @@ export class RegistryClient {
    */
   async getSkill(name: string): Promise<SkillDetail> {
     const encodedName = this.encodePackageName(name);
-    return this.request<SkillDetail>(`/skills/${encodedName}`, { method: "GET", anonymous: true });
+    return this.request<SkillDetail>(`/skills/${encodedName}`, { method: "GET", anonymous: true }, skillDetailSchema);
   }
 
   /**
@@ -305,10 +337,11 @@ export class RegistryClient {
    */
   async getSkillVersion(name: string, version: string): Promise<SkillVersionDetail> {
     const encodedName = this.encodePackageName(name);
-    return this.request<SkillVersionDetail>(`/skills/${encodedName}/${encodeURIComponent(version)}`, {
-      method: "GET",
-      anonymous: true,
-    });
+    return this.request<SkillVersionDetail>(
+      `/skills/${encodedName}/${encodeURIComponent(version)}`,
+      { method: "GET", anonymous: true },
+      versionDetailSchema
+    );
   }
 
   /**
@@ -346,12 +379,11 @@ export class RegistryClient {
     const blob = new Blob([tarballBuffer as unknown as BlobPart], { type: "application/gzip" });
     formData.append("file", blob, "package.tar.gz");
 
-    return this.request<PublishResponse>("/skills", {
-      method: "POST",
-      body: formData,
-      token: authToken,
-      anonymous: false,
-    });
+    return this.request<PublishResponse>(
+      "/skills",
+      { method: "POST", body: formData, token: authToken, anonymous: false },
+      publishSchema
+    );
   }
 
   /**
@@ -382,11 +414,7 @@ export class RegistryClient {
       throw new AuthError("Authentication required. Run 'skillapt login' or set SKILLAPT_TOKEN.");
     }
 
-    return this.request<User>("/me", {
-      method: "GET",
-      token: authToken,
-      anonymous: false,
-    });
+    return this.request<User>("/me", { method: "GET", token: authToken, anonymous: false }, userSchema);
   }
 
   /**
@@ -472,10 +500,11 @@ export class RegistryClient {
 
   private async request<T>(
     path: string,
-    options: RequestInit & { token?: string; anonymous?: boolean } = {}
+    options: RequestInit & { token?: string; anonymous?: boolean } = {},
+    schema?: z.ZodType
   ): Promise<T> {
     const res = await this.rawRequest(path, options);
-    const text = await res.text();
+    const text = await readBodyLimited(res, MAX_RESPONSE_BYTES);
     let json: unknown;
     try {
       json = text ? JSON.parse(text) : {};
@@ -484,6 +513,17 @@ export class RegistryClient {
         `Invalid JSON returned from registry (${res.status}): ${text.slice(0, 100)}`,
         res.status
       );
+    }
+    if (schema) {
+      const parsed = schema.safeParse(json);
+      if (!parsed.success) {
+        const where = parsed.error.issues[0]?.path.join(".") || "(root)";
+        throw new RegistryError(
+          `Unexpected response shape from registry for ${path} (invalid field: ${where}).`,
+          res.status,
+          "INVALID_RESPONSE"
+        );
+      }
     }
     return json as T;
   }
@@ -520,13 +560,12 @@ export class RegistryClient {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-        const res = await fetch(url, {
-          ...options,
-          headers,
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
+        let res: Response;
+        try {
+          res = await this.fetchFollowingRedirects(url, { ...options, headers, signal: controller.signal });
+        } finally {
+          clearTimeout(timeout);
+        }
 
         // Retry on 5xx server errors
         if (res.status >= 500 && attempt < maxAttempts) {
@@ -572,12 +611,52 @@ export class RegistryClient {
     throw lastError ?? new NetworkError(`Request failed after ${maxAttempts} attempts.`, url);
   }
 
+  /**
+   * fetch() with manual, validated redirect handling:
+   * - only GET/HEAD requests follow redirects;
+   * - every hop must satisfy the registry URL policy (https, or http on localhost);
+   * - the Authorization header is dropped as soon as the origin changes.
+   */
+  private async fetchFollowingRedirects(url: string, init: RequestInit): Promise<Response> {
+    let currentUrl = url;
+    let headers = new Headers(init.headers);
+    for (let hop = 0; ; hop++) {
+      const res = await fetch(currentUrl, { ...init, headers, redirect: "manual" });
+      const location = res.headers.get("location");
+      if (res.status < 300 || res.status >= 400 || res.status === 304 || !location) {
+        return res;
+      }
+      await res.body?.cancel().catch(() => undefined);
+      const method = (init.method ?? "GET").toUpperCase();
+      if (method !== "GET" && method !== "HEAD") {
+        throw new RegistryError(
+          `Registry responded with an unexpected redirect (${res.status}) to a ${method} request.`,
+          res.status
+        );
+      }
+      if (hop >= MAX_REDIRECTS) {
+        throw new RegistryError(`Too many redirects (more than ${MAX_REDIRECTS}) contacting registry.`, res.status);
+      }
+      const next = new URL(location, currentUrl).toString();
+      try {
+        validateRegistryUrl(next);
+      } catch {
+        throw new RegistryError(`Refusing to follow redirect to insecure or invalid URL: ${next}`, res.status);
+      }
+      if (new URL(next).origin !== new URL(currentUrl).origin) {
+        headers = new Headers(headers);
+        headers.delete("authorization");
+      }
+      currentUrl = next;
+    }
+  }
+
   private async handleErrorResponse(res: Response, url: string): Promise<never> {
     let errorCode = "UNKNOWN_ERROR";
     let errorMessage = `Registry request failed with status ${res.status}`;
 
     try {
-      const text = await res.text();
+      const text = await readBodyLimited(res, 64 * 1024);
       if (text) {
         const parsed = JSON.parse(text) as { error?: { code?: string; message?: string } };
         if (parsed.error) {
@@ -619,4 +698,31 @@ export class RegistryClient {
 
     throw new RegistryError(errorMessage, res.status, errorCode);
   }
+}
+
+/**
+ * Read a response body as UTF-8 text, aborting if it exceeds maxBytes.
+ */
+export async function readBodyLimited(res: Response, maxBytes: number): Promise<string> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new RegistryError(`Registry response too large (${declared} bytes, limit ${maxBytes}).`, res.status);
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let out = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new RegistryError(`Registry response too large (limit ${maxBytes} bytes).`, res.status);
+    }
+    out += decoder.decode(value, { stream: true });
+  }
+  return out + decoder.decode();
 }
