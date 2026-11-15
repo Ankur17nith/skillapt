@@ -10,7 +10,7 @@ describe("A-02: Installation and Packaging", () => {
     const pkgRaw = await readFile(resolve("package.json"), "utf-8");
     const pkg = JSON.parse(pkgRaw);
 
-    expect(pkg.engines?.node).toMatch(/>=\s*20/);
+    expect(pkg.engines?.node).toMatch(/>=\s*22/);
     expect(pkg.scripts?.prepare).toBe("npm run build");
     expect(pkg.scripts?.prepublishOnly).toContain("npm run build");
     expect(pkg.files).toContain("dist");

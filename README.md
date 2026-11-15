@@ -3,7 +3,7 @@
 **A secure package manager for AI agent skills with its own skill registry, distributed via npm.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-green.svg)](https://nodejs.org/)
 
 `skillapt` manages AI agent skills with its own dedicated skill registry while being conveniently distributed via npm. It discovers, resolves, installs, locks, packs, and publishes AI agent skills (for Claude, Cursor, Codex, Antigravity, and custom LLM frameworks) backed by registry and GitHub sources.
 
@@ -29,7 +29,7 @@ npx skillapt install vercel-labs/skills/skills/find-skills
 npm install -g skillapt
 ```
 
-> **Requirement**: Node.js **20.0.0** or higher.
+> **Requirement**: Node.js **22.12.0** or higher.
 
 ---
 
@@ -292,7 +292,7 @@ Runs comprehensive system diagnostics.
 skillapt doctor
 ```
 Checks:
-- Node.js runtime version (>= 20.0.0)
+- Node.js runtime version (>= 22.12.0)
 - Registry server reachability (`/health` and `/stats`)
 - Authentication token validity (`/v1/me`)
 - Skills directory permissions

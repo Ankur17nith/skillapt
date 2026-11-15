@@ -23,13 +23,13 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<boolea
 
   // 1. Check Node.js version
   const currentVersion = process.version;
-  const satisfiesNode = semver.gte(currentVersion, "20.0.0");
+  const satisfiesNode = semver.gte(currentVersion, "22.12.0");
   checks.push({
     name: "Node.js runtime",
     ok: satisfiesNode,
     message: satisfiesNode
-      ? `${currentVersion} (satisfies >= 20.0.0)`
-      : `${currentVersion} (requires >= 20.0.0)`,
+      ? `${currentVersion} (satisfies >= 22.12.0)`
+      : `${currentVersion} (requires >= 22.12.0)`,
   });
 
   // 2. Check Registry Reachability

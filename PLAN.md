@@ -85,7 +85,7 @@ Ecosystem:
                          +--- GitHub API / codeload ---------+(only for GitHub-sourced skills)
                          +--> .skills/  and  <agent>/skills/  on disk
 ```
-Tech: TypeScript (ESM), Node >= 20, commander, zod, semver, tar, tsup, vitest. Binary: `skillapt`.
+Tech: TypeScript (ESM), Node >= 22.12, commander, zod, semver, tar, tsup, vitest. Binary: `skillapt`.
 
 ### 2.1 Repository map
 ```
@@ -236,7 +236,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - [x] **CLI-03** (A-02) package.json: `"prepare": "npm run build"`, `"prepublishOnly": "npm run typecheck && npm test && npm run build"`; `files` = `dist`, `README.md`, `LICENSE`; `dist/cli.js` starts with `#!/usr/bin/env node`; `engines.node >=20`.
   V: `npm pack` -> install the tarball in a temp dir -> `skillapt --version` works.
 - [x] **CLI-04** (A-02) Rewrite `install.sh`: remove the `curl .../dist/cli.js` fallback; if npm is missing print instructions and exit 1; handle EACCES (guide to `npm config set prefix` / version manager, never sudo); support `VERSION=x.y.z`; after install verify `command -v skillapt` and `skillapt --version`, exit 1 with a clear message on failure; print success only after verification.
-  V: run the script in a clean container with Node 20 and 22.
+  V: run the script in a clean container with Node 22 and 24.
 - [x] **CLI-05** (A-16, A-18) Remove `skillpm` bin alias, `SKILLPM_DIR` fallback, `skillpm` User-Agent; remove `@types/tar`; delete dead code in `encodePackageName`; make `doctor` read-only (no mkdir).
   V: `grep -ri skillpm src package.json` returns nothing; typecheck passes.
 
@@ -281,7 +281,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 #### Branch `chore/tests-and-ci`
 - [x] **CLI-21** (A-13) e2e tests use a local mock registry and recorded/mock GitHub responses; keep one opt-in live test behind `SKILLAPT_LIVE=1`; add `pretest` (or vitest globalSetup) that builds `dist`.
   V: fresh clone `npm ci && npm test` is green offline.
-- [x] **CLI-22** (A-19) `.github/workflows/ci.yml`: Node 20 and 22, `npm ci`, typecheck, test, build, pack-and-install smoke test; add `dependabot.yml`.
+- [x] **CLI-22** (A-19) `.github/workflows/ci.yml`: Node 22 and 24, `npm ci`, typecheck, test, build, pack-and-install smoke test; add `dependabot.yml`.
 - [x] **CLI-23** Regression tests for every item A-01..A-12 (one test file per area under `tests/security/`).
 
 #### Branch `docs/readme-spec-sync`
@@ -332,7 +332,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 ## 10. Release and operations
 
 - Versioning: semver. `main` -> tags `vX.Y.Z`; npm publish with provenance; GitHub release with notes from CHANGELOG.
-- Supported: Node 20 and 22, macOS, Linux, Windows (symlink -> copy fallback).
+- Supported: Node 22 and 24, macOS, Linux, Windows (symlink -> copy fallback).
 - Vulnerability reports: SECURITY.md address; acknowledge within 72 hours.
 - Compatibility: the CLI must keep working with registry API v1 responses that add new optional fields.
 
@@ -390,7 +390,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - Installing from GitHub works with pinned refs; `update` keeps the pin; `--frozen` is truly frozen.
 - A malicious skill cannot write outside `.skills`, cannot ship binaries or hidden config unnoticed, and the stored token never leaves its registry origin.
 - `pack` is reproducible; `publish` validates locally first.
-- The test suite runs offline and fast; CI runs on Node 20/22; docs and SPEC match the code; SECURITY.md, CHANGELOG.md and release notes exist.
+- The test suite runs offline and fast; CI runs on Node 22/24; docs and SPEC match the code; SECURITY.md, CHANGELOG.md and release notes exist.
 
 ## 15. Appendix
 Env vars: `SKILLAPT_REGISTRY`, `SKILLAPT_DIR`, `SKILLAPT_TOKEN`, `GITHUB_TOKEN`, `SKILLAPT_<TARGET>_DIR`, `SKILLAPT_LIVE` (tests).
@@ -402,7 +402,7 @@ Glossary: skill = SKILL.md + resources; package = published skill version; targe
 skillapt is "npm for AI agent skills". A developer types one command and gets a vetted, versioned skill (instructions plus optional scripts) installed into their AI coding agent (Claude, Cursor, Codex, Antigravity). Publishers upload skills to a public registry under their GitHub name. The registry verifies every upload, serves it with integrity checks and lets admins pull malware.
 
 It has two deliverables:
-1. **`skillapt` CLI** (npm package, Node >= 20): what users and publishers run.
+1. **`skillapt` CLI** (npm package, Node >= 22.12): what users and publishers run.
 2. **`skillapt-registry`** (Cloudflare Worker + D1 + R2) at `https://registry.skillapt.dev/v1`: what the CLI talks to.
 
 ### 16.2 What it does, by role

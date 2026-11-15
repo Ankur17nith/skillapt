@@ -11,14 +11,16 @@ echo "=== Installing ${PRODUCT_NAME} CLI ==="
 
 # 1. Check Node.js runtime
 if ! command -v node >/dev/null 2>&1; then
-  echo "Error: Node.js is required to run ${PRODUCT_NAME}. Please install Node.js >= 20." >&2
+  echo "Error: Node.js is required to run ${PRODUCT_NAME}. Please install Node.js >= 22.12." >&2
   echo "Visit https://nodejs.org or use a version manager (nvm, fnm, volta)." >&2
   exit 1
 fi
 
-NODE_MAJOR=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "${NODE_MAJOR}" -lt 20 ]; then
-  echo "Error: Node.js 20 or higher is required. Found $(node -v)." >&2
+NODE_VERSION=$(node -v | sed 's/v//')
+NODE_MAJOR=$(echo "${NODE_VERSION}" | cut -d. -f1)
+NODE_MINOR=$(echo "${NODE_VERSION}" | cut -d. -f2)
+if [ "${NODE_MAJOR}" -lt 22 ] || { [ "${NODE_MAJOR}" -eq 22 ] && [ "${NODE_MINOR}" -lt 12 ]; }; then
+  echo "Error: Node.js 22.12 or higher is required. Found $(node -v)." >&2
   exit 1
 fi
 
