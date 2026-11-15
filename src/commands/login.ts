@@ -1,9 +1,13 @@
 import pc from "picocolors";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { Writable } from "node:stream";
+
 import { getRegistryUrl } from "../lib/config.js";
 import { openBrowser, verifyToken, setStoredToken } from "../lib/auth.js";
 import { getBanner } from "../lib/banner.js";
+
+const MAX_TOKEN_LENGTH = 4096;
 
 export interface LoginOptions {
   token?: string;
@@ -18,6 +22,9 @@ export async function loginCommand(options: LoginOptions = {}): Promise<void> {
     let buf = "";
     for await (const chunk of process.stdin) {
       buf += chunk;
+      if (buf.length > MAX_TOKEN_LENGTH) {
+        throw new Error("Token from stdin is too long.");
+      }
     }
     token = buf.trim();
   } else if (options.token) {
@@ -49,17 +56,24 @@ export async function loginCommand(options: LoginOptions = {}): Promise<void> {
       );
     }
 
-    const rl = createInterface({ input, output });
+    // Do not echo the pasted token back to the terminal.
+    output.write(pc.bold("Paste API Token (input hidden): "));
+    const silent = new Writable({ write: (_chunk, _enc, cb) => cb() });
+    const rl = createInterface({ input, output: silent, terminal: true });
     try {
-      const answer = await rl.question(pc.bold("Paste API Token: "));
+      const answer = await rl.question("");
       token = answer.trim();
     } finally {
       rl.close();
+      output.write("\n");
     }
   }
 
   if (!token) {
     throw new Error("No token provided. Login aborted.");
+  }
+  if (token.length > MAX_TOKEN_LENGTH) {
+    throw new Error("Token is too long.");
   }
 
   console.log(pc.dim("Verifying token with registry..."));
