@@ -29,11 +29,11 @@ import { moveDir, assertInside } from "../lib/fs.js";
 import { getBanner } from "../lib/banner.js";
 import { RegistryClient } from "../lib/registry.js";
 import { DependencyResolver } from "../lib/dependencies.js";
-import { syncSkillToTarget } from "../lib/targets.js";
+import { syncSkillToTarget, normalizeTargets } from "../lib/targets.js";
 
 export interface InstallOptions {
   frozen?: boolean;
-  target?: string;
+  target?: string | string[];
   global?: boolean;
   yes?: boolean;
   strict?: boolean;
@@ -60,7 +60,7 @@ export async function installSingle(
   options?: {
     forceSha?: string;
     forceVersion?: string;
-    target?: string;
+    target?: string | string[];
     global?: boolean;
     yes?: boolean;
     strict?: boolean;
@@ -80,7 +80,7 @@ async function installGitHub(
   parsed: GitHubSource,
   options?: {
     forceSha?: string;
-    target?: string;
+    target?: string | string[];
     global?: boolean;
     yes?: boolean;
     strict?: boolean;
@@ -177,7 +177,7 @@ async function installRegistry(
   parsed: RegistrySource,
   options?: {
     forceVersion?: string;
-    target?: string;
+    target?: string | string[];
     global?: boolean;
     yes?: boolean;
   }
@@ -248,10 +248,10 @@ async function installRegistry(
 
 async function syncTargets(
   skillNames: string[],
-  options?: { target?: string; global?: boolean }
+  options?: { target?: string | string[]; global?: boolean }
 ): Promise<void> {
-  if (!options?.target) return;
-  const targets = options.target.split(",").map((t) => t.trim()).filter(Boolean);
+  const targets = normalizeTargets(options?.target);
+  if (targets.length === 0) return;
   const skillsDir = getSkillsDir();
 
   let lockfile = await readLockfile();
@@ -264,7 +264,7 @@ async function syncTargets(
         skillName: name,
         sourceDir,
         target,
-        global: options.global,
+        global: options?.global,
       });
       console.log(
         `${pc.green("✓")} Synced ${pc.bold(name)} to ${pc.cyan(res.target)} (${res.mode}: ${pc.dim(res.targetPath)})`
