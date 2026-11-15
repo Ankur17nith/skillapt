@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 /**
  * The single canonical product name constant as required by SPEC.md.
@@ -7,9 +8,29 @@ import { join } from "node:path";
 export const PRODUCT_NAME = "skillapt";
 
 /**
- * Default production registry endpoint.
+ * Default registry endpoint, or null while no public registry is deployed.
+ *
+ * TODO(deploy): after deploying skillapt-registry to Cloudflare Workers, set this to the
+ * real base URL (e.g. "https://skillapt-registry.<account>.workers.dev/v1") and update:
+ *   - this constant (src/lib/config.ts)
+ *   - the SKILLAPT_REGISTRY default in the README.md environment variable table
+ *   - the "Registry status" note at the top of README.md
+ *   - the default registry in docs/SPEC.md and docs/openapi.yaml (servers section)
+ * Until then users configure a registry with SKILLAPT_REGISTRY or `skillapt login`.
  */
-export const DEFAULT_REGISTRY_URL = "https://registry.skillapt.dev/v1";
+export const DEFAULT_REGISTRY_URL: string | null = null;
+
+/** Thrown when a registry is required but none is configured. */
+export class RegistryNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "No skillapt registry is configured. Set SKILLAPT_REGISTRY to your registry base URL " +
+        "(for example SKILLAPT_REGISTRY=https://<your-worker>.workers.dev/v1), or install " +
+        "directly from GitHub with `skillapt install owner/repo`."
+    );
+    this.name = "RegistryNotConfiguredError";
+  }
+}
 
 /**
  * Get the skills directory (supports SKILLAPT_DIR or --dir flag via env var).
@@ -49,12 +70,34 @@ export function validateRegistryUrl(url: string): string {
 }
 
 /**
- * Get the active registry base URL (supports SKILLAPT_REGISTRY env var).
+ * Resolve the configured registry without throwing when none is set.
+ * Precedence: SKILLAPT_REGISTRY env var, then the registry saved by `skillapt login`,
+ * then DEFAULT_REGISTRY_URL.
+ */
+export function getConfiguredRegistryUrl(): string | null {
+  const fromEnv = process.env.SKILLAPT_REGISTRY?.trim();
+  const raw = fromEnv || readStoredRegistry() || DEFAULT_REGISTRY_URL;
+  if (!raw) return null;
+  return validateRegistryUrl(raw.replace(/\/+$/, ""));
+}
+
+/**
+ * Get the active registry base URL; throws RegistryNotConfiguredError when none is configured.
  */
 export function getRegistryUrl(): string {
-  const url = process.env.SKILLAPT_REGISTRY ?? DEFAULT_REGISTRY_URL;
-  const clean = url.replace(/\/+$/, "");
-  return validateRegistryUrl(clean);
+  const url = getConfiguredRegistryUrl();
+  if (!url) throw new RegistryNotConfiguredError();
+  return url;
+}
+
+function readStoredRegistry(): string | null {
+  try {
+    const raw = readFileSync(join(getConfigDir(), "config.json"), "utf-8");
+    const parsed = JSON.parse(raw) as { registry?: unknown };
+    return typeof parsed.registry === "string" && parsed.registry ? parsed.registry : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

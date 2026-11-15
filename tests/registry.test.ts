@@ -22,10 +22,14 @@ describe("RegistryClient", () => {
     process.env = originalEnv;
   });
 
-  it("uses default registry base URL when env is not set", () => {
+  it("uses the default registry when env is not set, or fails clearly when there is none", () => {
     delete process.env.SKILLAPT_REGISTRY;
-    const client = new RegistryClient();
-    expect(client.getBaseUrl()).toBe(DEFAULT_REGISTRY_URL);
+    process.env.XDG_CONFIG_HOME = "/nonexistent-skillapt-config-home";
+    if (DEFAULT_REGISTRY_URL) {
+      expect(new RegistryClient().getBaseUrl()).toBe(DEFAULT_REGISTRY_URL);
+    } else {
+      expect(() => new RegistryClient()).toThrow(/No skillapt registry is configured/);
+    }
   });
 
   it("uses SKILLAPT_REGISTRY env var when set", () => {

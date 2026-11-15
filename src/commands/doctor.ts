@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import semver from "semver";
-import { getRegistryUrl, getSkillsDir } from "../lib/config.js";
+import { getConfiguredRegistryUrl, getSkillsDir } from "../lib/config.js";
 import { getAuthToken } from "../lib/auth.js";
 import { RegistryClient, type HealthStatus, type User } from "../lib/registry.js";
 
@@ -33,35 +33,48 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<boolea
   });
 
   // 2. Check Registry Reachability
-  const registryUrl = getRegistryUrl();
-  const client = new RegistryClient();
+  const registryUrl = getConfiguredRegistryUrl();
   let registryHealth: HealthStatus | null = null;
-  let registryOk = false;
-  let registryMsg = "";
+  let client: RegistryClient | null = null;
 
-  try {
-    registryHealth = await client.getHealth();
-    registryOk = true;
-    registryMsg = `${registryUrl} (reachable, ${registryHealth.product} v${registryHealth.version})`;
-  } catch (err: unknown) {
-    registryOk = false;
-    registryMsg = `${registryUrl} (unreachable: ${err instanceof Error ? err.message : String(err)})`;
+  if (!registryUrl) {
+    // Not an error: GitHub installs work without a registry.
+    checks.push({
+      name: "Registry service",
+      ok: true,
+      message:
+        "not configured (GitHub installs work; set SKILLAPT_REGISTRY=<registry base URL> to use a registry)",
+      details: null,
+    });
+  } else {
+    client = new RegistryClient();
+    let registryOk = false;
+    let registryMsg = "";
+    try {
+      registryHealth = await client.getHealth();
+      registryOk = true;
+      registryMsg = `${registryUrl} (reachable, ${registryHealth.product} v${registryHealth.version})`;
+    } catch (err: unknown) {
+      registryOk = false;
+      registryMsg =
+        `${registryUrl} (unreachable: ${err instanceof Error ? err.message : String(err)}). ` +
+        "Check the URL in SKILLAPT_REGISTRY, your network or proxy settings, and that the registry is deployed.";
+    }
+    checks.push({
+      name: "Registry service",
+      ok: registryOk,
+      message: registryMsg,
+      details: registryHealth,
+    });
   }
 
-  checks.push({
-    name: "Registry service",
-    ok: registryOk,
-    message: registryMsg,
-    details: registryHealth,
-  });
-
   // 3. Check Authentication & Token
-  const token = await getAuthToken();
+  const token = client ? await getAuthToken() : null;
   let authOk = true;
   let authMsg = "";
   let userDetails: User | null = null;
 
-  if (token) {
+  if (token && client) {
     try {
       userDetails = await client.getMe(token);
       authMsg = `Logged in as @${userDetails.handle} (${userDetails.name || userDetails.email})`;
@@ -71,7 +84,9 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<boolea
       authMsg = `Token configured but invalid (${err instanceof Error ? err.message : String(err)})`;
     }
   } else {
-    authMsg = "Not logged in (anonymous mode: public downloads only)";
+    authMsg = client
+      ? "Not logged in (anonymous mode: public downloads only)"
+      : "Not logged in (no registry configured)";
     authOk = true;
   }
 

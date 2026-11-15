@@ -350,7 +350,9 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
       `Installing ${pc.bold(String(lockedSkills.length))} skill(s) from ${pc.cyan("skills.lock.json")}${options.frozen ? " (frozen)" : ""}...\n`
     );
 
-    const client = new RegistryClient();
+    // Created lazily: GitHub-only lockfiles must work without a configured registry.
+    let registryClient: RegistryClient | undefined;
+    const getClient = (): RegistryClient => (registryClient ??= new RegistryClient());
 
     for (const [name, entry] of lockedSkills) {
       assertInside(skillsDir, toOnDiskName(name));
@@ -358,7 +360,7 @@ async function installAll(options: InstallOptions = {}): Promise<void> {
       const isReg = entry.source === "registry" || (!entry.source.includes("/") && entry.version);
       if (isReg) {
         console.log(`→ ${pc.bold(name)} ${pc.dim(`(v${entry.version})`)} [locked]`);
-        const { stream } = await client.downloadTarball(name, entry.version!);
+        const { stream } = await getClient().downloadTarball(name, entry.version!);
 
         await extractSkill({
           tarballStream: stream,

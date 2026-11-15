@@ -32,7 +32,8 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
     return;
   }
 
-  const client = new RegistryClient();
+  let registryClient: RegistryClient | undefined;
+  const getClient = (): RegistryClient => (registryClient ??= new RegistryClient());
   const outdatedList: OutdatedItem[] = [];
   const unreachable: Array<{ name: string; error: string }> = [];
 
@@ -71,7 +72,7 @@ export async function outdatedCommand(options: OutdatedOptions = {}): Promise<vo
       const requestedRange = entry.version ?? "*";
 
       try {
-        const detail = await client.getSkill(name);
+        const detail = await getClient().getSkill(name);
         const wantedSummary = resolveSkillVersion(detail, requestedRange);
         const wantedVersion = wantedSummary.version;
         const latestVersion = detail.latestVersion;
