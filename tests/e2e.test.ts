@@ -234,8 +234,8 @@ describe("e2e", () => {
     expect(out).toContain("No skills installed");
   });
 
-  it.runIf(process.env.LIVE_GITHUB_TEST === "1")(
-    "live GitHub API install (opt-in via LIVE_GITHUB_TEST=1)",
+  it.runIf(process.env.SKILLAPT_LIVE === "1" || process.env.LIVE_GITHUB_TEST === "1")(
+    "live GitHub API install (opt-in via SKILLAPT_LIVE=1)",
     async () => {
       const liveDir = await mkdtemp(join(tmpdir(), "skillapt-live-"));
       try {
