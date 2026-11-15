@@ -15,6 +15,7 @@ import {
   normalizeTargets,
   TARGET_CONFIGS,
   resolveTargetDir,
+  isTrustedSyncedTargetPath,
 } from "../lib/targets.js";
 
 export interface RemoveOptions {
@@ -100,6 +101,7 @@ export async function removeCommand(
   const entry = lockfile.skills[name];
   if (entry?.syncedTargets) {
     for (const targetPath of entry.syncedTargets) {
+      if (!isTrustedSyncedTargetPath(targetPath, name)) continue;
       try {
         await rm(targetPath, { recursive: true, force: true });
       } catch {
@@ -132,6 +134,7 @@ export async function removeCommand(
       const orphanEntry = updatedLockfile.skills[lockedKey];
       if (orphanEntry?.syncedTargets) {
         for (const targetPath of orphanEntry.syncedTargets) {
+          if (!isTrustedSyncedTargetPath(targetPath, lockedKey)) continue;
           try {
             await rm(targetPath, { recursive: true, force: true });
           } catch {

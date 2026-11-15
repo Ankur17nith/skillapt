@@ -24,6 +24,7 @@ describe("A-10: Target sync cleanup and orphan dependency pruning", () => {
   afterEach(async () => {
     process.chdir(origCwd);
     delete process.env.SKILLAPT_DIR;
+    delete process.env.SKILLAPT_CLAUDE_DIR;
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -32,6 +33,8 @@ describe("A-10: Target sync cleanup and orphan dependency pruning", () => {
     // manifest: root-skill
     // lockfile: root-skill (depends on child-dep) and child-dep
     // syncedTargets created on disk for both
+    // Recorded paths are only deleted when inside a known agent target dir.
+    process.env.SKILLAPT_CLAUDE_DIR = join(tmpDir, "custom-target");
     const customTargetRoot = join(tmpDir, "custom-target", "root-skill");
     const customTargetChild = join(tmpDir, "custom-target", "child-dep");
     await mkdir(join(tmpDir, "custom-target"), { recursive: true });

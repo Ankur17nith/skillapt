@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname, basename, isAbsolute } from "node:path";
 import { symlink, cp, mkdir, rm, readFile, lstat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import pc from "picocolors";
@@ -260,4 +260,39 @@ export async function getExistingTargetsForSkill(
   }
 
   return found;
+}
+
+/**
+ * Decide whether a path recorded in skills.lock.json (`syncedTargets`) is safe to delete.
+ *
+ * The lockfile is untrusted input (it ships inside repositories), so a recorded path is
+ * only trusted if it is exactly `<known agent target dir>/<on-disk skill name>`, where the
+ * known target dirs are those resolved for every supported target (project and global).
+ */
+export function isTrustedSyncedTargetPath(
+  recordedPath: string,
+  skillName: string,
+  projectRoot: string = "."
+): boolean {
+  if (typeof recordedPath !== "string" || !recordedPath || !isAbsolute(recordedPath)) {
+    return false;
+  }
+  const onDiskName = toOnDiskName(skillName);
+  const resolved = resolve(recordedPath);
+  if (basename(resolved) !== onDiskName) {
+    return false;
+  }
+  const parent = dirname(resolved);
+  for (const targetKey of Object.keys(TARGET_CONFIGS)) {
+    for (const isGlobal of [false, true]) {
+      try {
+        if (resolve(resolveTargetDir(targetKey, isGlobal, projectRoot)) === parent) {
+          return true;
+        }
+      } catch {
+        // unresolvable target; ignore
+      }
+    }
+  }
+  return false;
 }
