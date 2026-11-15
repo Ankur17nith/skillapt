@@ -5,6 +5,15 @@ All notable changes to `skillapt` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Minimum supported Node.js is now 22.12.0 (Node 20 is end-of-life and `commander` 15, `vitest` 5 and `tsup` 9 require it). CI now runs on Node 22 and 24.
+
+### Fixed
+- Intermittent test failures caused by `npm pack` re-running `prepare` and deleting `dist/` while e2e tests were executing the CLI.
+- CI pack smoke test now installs the packed tarball into a clean project and runs the installed binary.
+
 ## [1.0.0] - 2026-11-15
 
 ### Security
