@@ -35,3 +35,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Pack smoke test
+        run: |
+          TARBALL=$(npm pack)
+          node dist/cli.js --version
+          node dist/cli.js --help

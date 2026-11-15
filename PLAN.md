@@ -52,12 +52,12 @@
 
 | Field | Value |
 |---|---|
-| Last updated | 2026-11-15 (fix/pack-publish complete) |
+| Last updated | 2026-11-15 (chore/tests-and-ci complete) |
 | Current milestone | M3: pack/publish, tests, CI, docs |
-| Current branch | fix/pack-publish |
-| Current task | CLI-19, CLI-20 complete |
+| Current branch | chore/tests-and-ci |
+| Current task | CLI-21, CLI-22, CLI-23 complete |
 | Baseline build | `tsc` passes, `tsup` build OK, `npm audit` 0 vulns |
-| Baseline tests | 176 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
+| Baseline tests | 205 passed, 1 skipped (live GitHub opt-in via SKILLAPT_LIVE=1); offline suite green |
 | Registry live? | UNVERIFIED (`registry.skillapt.dev` did not resolve from the audit sandbox; check) |
 | npm published? | NO (`https://registry.npmjs.org/skillapt` returned 404 on 2026-11-11) |
 | Latest release | none (package.json version 0.1.0) |
@@ -278,10 +278,10 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 - [x] **CLI-20** `publish <file.tgz>` runs the same local validation before upload; `--registry` never reuses a stored token for another origin (see CLI-06).
 
 #### Branch `chore/tests-and-ci`
-- [ ] **CLI-21** (A-13) e2e tests use a local mock registry and recorded/mock GitHub responses; keep one opt-in live test behind `SKILLAPT_LIVE=1`; add `pretest` (or vitest globalSetup) that builds `dist`.
+- [x] **CLI-21** (A-13) e2e tests use a local mock registry and recorded/mock GitHub responses; keep one opt-in live test behind `SKILLAPT_LIVE=1`; add `pretest` (or vitest globalSetup) that builds `dist`.
   V: fresh clone `npm ci && npm test` is green offline.
-- [ ] **CLI-22** (A-19) `.github/workflows/ci.yml`: Node 20 and 22, `npm ci`, typecheck, test, build, pack-and-install smoke test; add `dependabot.yml`.
-- [ ] **CLI-23** Regression tests for every item A-01..A-12 (one test file per area under `tests/security/`).
+- [x] **CLI-22** (A-19) `.github/workflows/ci.yml`: Node 20 and 22, `npm ci`, typecheck, test, build, pack-and-install smoke test; add `dependabot.yml`.
+- [x] **CLI-23** Regression tests for every item A-01..A-12 (one test file per area under `tests/security/`).
 
 #### Branch `docs/readme-spec-sync`
 - [ ] **CLI-24** (A-14, A-17) README: replace "completely independent of npm" with "own skill registry, distributed via npm"; document env vars, all targets and paths, permissions semantics, threat model (prompt injection in SKILL.md, scripts, registry compromise; SHA-256 is integrity against the registry's own hash, not a signature); plain text instead of LaTeX; real example skills or placeholders clearly marked.
@@ -356,6 +356,7 @@ Order is mandatory. Each BRANCH is created from the latest `main`, merged with `
 | 2026-11-15 | Antigravity | fix/scoped-names-and-target-layout | CLI-13 | flat on-disk folder layout (scope--name), D-004 SKILL.md name match without rewriting, lockfile records folder, collision rejection (175 pass, 1 skipped) | merge to main, start Branch 7 |
 | 2026-11-15 | Antigravity | fix/install-lockfile-update-logic | CLI-14..CLI-18 | lockfile sync, diamond resolver, syncedTargets tracking, frozen validation, outdated exit code (176 pass, 1 skipped) | merge to main, start Branch 8 |
 | 2026-11-15 | Antigravity | fix/pack-publish | CLI-19, CLI-20 | reproducible packaging, yaml frontmatter parser, outDir exclusion, tarball publish validation (176 pass, 1 skipped) | merge to main, start Branch 9 |
+| 2026-11-15 | Antigravity | chore/tests-and-ci | CLI-21, CLI-22, CLI-23 | CI workflow, dependabot.yml, e2e live opt-in, A-01..A-12 security tests green (205 pass, 1 skipped) | merge to main, start Branch 10 |
 
 ---
 
