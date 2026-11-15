@@ -132,6 +132,10 @@ Automatically symlinks or copies installed skills into your AI agent's skills fo
 # Sync to Claude (.claude/skills)
 skillapt install vercel-labs/skills/skills/find-skills --target claude
 
+# Sync to multiple targets (repeated flag or comma-separated)
+skillapt install vercel-labs/skills/skills/find-skills --target claude --target antigravity
+skillapt install vercel-labs/skills/skills/find-skills --target claude,antigravity
+
 # Sync to Cursor (.cursor/skills)
 skillapt install vercel-labs/skills/skills/find-skills --target cursor
 
@@ -198,6 +202,9 @@ skillapt update
 
 # Update a single skill
 skillapt update <skill-name>
+
+# Update and sync to agent target(s) (repeated flag or comma-separated)
+skillapt update <skill-name> --target claude,antigravity
 ```
 
 ---
@@ -212,9 +219,15 @@ skillapt list --json
 ---
 
 ### `skillapt remove <name>`
-Uninstalls a skill from `.skills/`, prunes orphaned dependencies, and cleans up synced copies from agent targets.
+Uninstalls a skill from `.skills/`, prunes orphaned dependencies, and cleans up synced copies from agent targets. When `--target` is specified, the skill is only un-synced from the specified targets while leaving `.skills/` and `skills.json` intact.
 ```bash
+# Remove a skill completely from .skills/, manifest, lockfile, and all agent targets
 skillapt remove <skill-name>
+
+# Remove/un-sync a skill ONLY from specified agent target(s)
+skillapt remove <skill-name> --target claude --target antigravity
+skillapt remove <skill-name> --target claude,antigravity
+skillapt remove <skill-name> --target claude --global
 ```
 
 ---

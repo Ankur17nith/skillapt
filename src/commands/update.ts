@@ -1,7 +1,7 @@
 import pc from "picocolors";
 import { join } from "node:path";
 import { readManifest } from "../lib/manifest.js";
-import { readLockfile } from "../lib/lockfile.js";
+import { readLockfile, writeLockfile } from "../lib/lockfile.js";
 import { getSkillsDir } from "../lib/config.js";
 import { toOnDiskName } from "../lib/source.js";
 import { syncSkillToTarget, getExistingTargetsForSkill } from "../lib/targets.js";
@@ -9,7 +9,7 @@ import { installSingle } from "./install.js";
 
 export interface UpdateOptions {
   json?: boolean;
-  target?: string;
+  target?: string | string[];
   global?: boolean;
 }
 
@@ -61,16 +61,26 @@ export async function updateCommand(
 
     // Re-sync any targets that were previously synced
     const sourceDir = join(skillsDir, toOnDiskName(skillName));
+    const updatedLock = await readLockfile();
+    let lockChanged = false;
     for (const pt of previousTargets) {
-      await syncSkillToTarget({
+      const res = await syncSkillToTarget({
         skillName,
         sourceDir,
         target: pt.target,
         global: pt.global,
       });
+      if (updatedLock.skills[skillName]) {
+        const current = new Set(updatedLock.skills[skillName].syncedTargets ?? []);
+        current.add(res.targetPath);
+        updatedLock.skills[skillName].syncedTargets = Array.from(current);
+        lockChanged = true;
+      }
+    }
+    if (lockChanged) {
+      await writeLockfile(updatedLock);
     }
 
-    const updatedLock = await readLockfile();
     const newVersion =
       updatedLock.skills[skillName]?.version ??
       updatedLock.skills[skillName]?.sha?.slice(0, 7) ??

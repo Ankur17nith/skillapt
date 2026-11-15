@@ -344,4 +344,153 @@ describe("Install, lockfile, update, and remove logic", () => {
       process.chdir(origCwd);
     }
   });
+
+  it("install with repeated and comma-separated targets syncs to all targets and records in lockfile", async () => {
+    const skillPath = join(skillsDir, "multi-target-skill");
+    await mkdir(skillPath, { recursive: true });
+    await writeFile(join(skillPath, "SKILL.md"), "# Multi Target");
+    await writeFile(join(skillPath, "skill.json"), '{"name": "multi-target-skill"}');
+
+    vi.spyOn(extractModule, "extractSkill").mockImplementation(async () => {
+      await mkdir(join(skillsDir, "multi-target-skill"), { recursive: true });
+      await writeFile(join(skillsDir, "multi-target-skill", "SKILL.md"), "# Multi Target");
+      await writeFile(join(skillsDir, "multi-target-skill", "skill.json"), '{"name": "multi-target-skill"}');
+      return join(skillsDir, "multi-target-skill");
+    });
+    vi.spyOn(RegistryClient.prototype, "downloadTarball").mockResolvedValue({
+      stream: new ReadableStream(),
+      sha256: "hash123",
+    });
+    vi.spyOn(RegistryClient.prototype, "getSkill").mockResolvedValue({
+      name: "multi-target-skill",
+      description: "Multi target test",
+      license: "MIT",
+      category: "tools" as any,
+      compatibility: ["claude"],
+      owner: { handle: "alex" },
+      latestVersion: "1.0.0",
+      downloads: 1,
+      createdAt: "",
+      updatedAt: "",
+      versions: {
+        "1.0.0": {
+          version: "1.0.0",
+          sha256: "hash123",
+          size: 100,
+          tarballUrl: "https://example.com/multi.tgz",
+          dependencies: {},
+          publishedAt: "",
+          yanked: false,
+          permissions: { network: false, shell: false, filesystem: "none" },
+        },
+      },
+    });
+
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      // Install with array (repeated flag simulation) and comma-separated string
+      await installCommand("multi-target-skill", {
+        target: ["claude,cursor", "antigravity"],
+        yes: true,
+      });
+
+      expect(existsSync(join(tmpDir, ".claude", "skills", "multi-target-skill"))).toBe(true);
+      expect(existsSync(join(tmpDir, ".cursor", "skills", "multi-target-skill"))).toBe(true);
+      expect(existsSync(join(tmpDir, ".agents", "skills", "multi-target-skill"))).toBe(true);
+
+      const lock = await readLockfile(tmpDir);
+      const synced = lock.skills["multi-target-skill"]?.syncedTargets;
+      expect(synced).toBeDefined();
+      expect(synced?.length).toBe(3);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it("remove with --target un-syncs only specified targets, leaving .skills/ and skills.json intact", async () => {
+    const skillPath = join(skillsDir, "targeted-remove-skill");
+    await mkdir(skillPath, { recursive: true });
+    await writeFile(join(skillPath, "SKILL.md"), "# Targeted Remove");
+    await writeFile(join(skillPath, "skill.json"), '{"name": "targeted-remove-skill"}');
+
+    const claudePath = join(tmpDir, ".claude", "skills", "targeted-remove-skill");
+    const antigravityPath = join(tmpDir, ".agents", "skills", "targeted-remove-skill");
+    await syncSkillToTarget({
+      skillName: "targeted-remove-skill",
+      sourceDir: skillPath,
+      target: "claude",
+      projectRoot: tmpDir,
+    });
+    await syncSkillToTarget({
+      skillName: "targeted-remove-skill",
+      sourceDir: skillPath,
+      target: "antigravity",
+      projectRoot: tmpDir,
+    });
+
+    await writeManifest(
+      {
+        skills: {
+          "targeted-remove-skill": { source: "targeted-remove-skill", version: "1.0.0" },
+        },
+      },
+      tmpDir
+    );
+
+    await writeLockfile(
+      {
+        lockfileVersion: 2,
+        skills: {
+          "targeted-remove-skill": {
+            source: "registry",
+            version: "1.0.0",
+            syncedTargets: [claudePath, antigravityPath],
+          },
+        },
+      },
+      tmpDir
+    );
+
+    expect(existsSync(claudePath)).toBe(true);
+    expect(existsSync(antigravityPath)).toBe(true);
+
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      // Remove only from claude
+      await removeCommand("targeted-remove-skill", { target: "claude" });
+
+      // Claude target removed, but antigravity target remains
+      expect(existsSync(claudePath)).toBe(false);
+      expect(existsSync(antigravityPath)).toBe(true);
+
+      // Package in .skills/ remains
+      expect(existsSync(skillPath)).toBe(true);
+
+      // Manifest remains intact
+      const manifest = await readManifest(tmpDir);
+      expect(manifest.skills["targeted-remove-skill"]).toBeDefined();
+
+      // Lockfile entry remains, syncedTargets updated
+      const lock = await readLockfile(tmpDir);
+      expect(lock.skills["targeted-remove-skill"]).toBeDefined();
+      expect(lock.skills["targeted-remove-skill"].syncedTargets).toEqual([antigravityPath]);
+
+      // Remove from antigravity as well using repeated/array target
+      await removeCommand("targeted-remove-skill", { target: ["antigravity"] });
+      expect(existsSync(antigravityPath)).toBe(false);
+      expect(existsSync(skillPath)).toBe(true);
+
+      const lock2 = await readLockfile(tmpDir);
+      expect(lock2.skills["targeted-remove-skill"].syncedTargets).toEqual([]);
+
+      // Test unknown target throws error
+      await expect(
+        removeCommand("targeted-remove-skill", { target: "unknown-ide" })
+      ).rejects.toThrow(/Unknown install target "unknown-ide"/);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
 });

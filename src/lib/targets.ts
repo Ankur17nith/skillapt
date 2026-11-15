@@ -49,6 +49,20 @@ export const TARGET_CONFIGS: Record<string, TargetDefinition> = {
   },
 };
 
+/**
+ * Normalizes a target option (single string, comma-separated string, or array of strings)
+ * into a clean, deduplicated array of target keys.
+ */
+export function normalizeTargets(target?: string | string[]): string[] {
+  if (!target) return [];
+  const list = Array.isArray(target) ? target : [target];
+  const items = list
+    .flatMap((t) => t.split(","))
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  return Array.from(new Set(items));
+}
+
 export interface SyncTargetOptions {
   skillName: string;
   sourceDir: string; // Directory of installed skill, e.g. .skills/<name>
@@ -185,19 +199,25 @@ export async function syncSkillToTarget(
 }
 
 /**
- * Remove an installed skill and its symlink/copy from all known agent targets.
+ * Remove an installed skill and its symlink/copy from known agent targets.
+ * If targets is provided, only removes from those targets; otherwise removes from all.
+ * If isGlobal is specified, only checks that scope; otherwise checks both local and global.
  */
 export async function removeSkillFromTargets(
   skillName: string,
-  projectRoot: string = "."
+  projectRoot: string = ".",
+  targets?: string[],
+  isGlobal?: boolean
 ): Promise<string[]> {
   const onDiskName = toOnDiskName(skillName);
   const removed: string[] = [];
+  const targetKeys = targets && targets.length > 0 ? targets : Object.keys(TARGET_CONFIGS);
+  const globalModes = isGlobal !== undefined ? [isGlobal] : [false, true];
 
-  for (const targetKey of Object.keys(TARGET_CONFIGS)) {
-    for (const isGlobal of [false, true]) {
+  for (const targetKey of targetKeys) {
+    for (const glob of globalModes) {
       try {
-        const baseDir = resolveTargetDir(targetKey, isGlobal, projectRoot);
+        const baseDir = resolveTargetDir(targetKey, glob, projectRoot);
         const targetPath = join(baseDir, onDiskName);
         try {
           await lstat(targetPath);

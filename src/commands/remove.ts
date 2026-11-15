@@ -10,9 +10,67 @@ import { readLockfile, writeLockfile, removeLockEntry } from "../lib/lockfile.js
 import { getSkillsDir } from "../lib/config.js";
 import { assertInside } from "../lib/fs.js";
 import { toOnDiskName } from "../lib/source.js";
-import { removeSkillFromTargets } from "../lib/targets.js";
+import {
+  removeSkillFromTargets,
+  normalizeTargets,
+  TARGET_CONFIGS,
+  resolveTargetDir,
+} from "../lib/targets.js";
 
-export async function removeCommand(name: string): Promise<void> {
+export interface RemoveOptions {
+  target?: string | string[];
+  global?: boolean;
+}
+
+export async function removeCommand(
+  name: string,
+  options: RemoveOptions = {}
+): Promise<void> {
+  const targets = normalizeTargets(options.target);
+
+  if (targets.length > 0) {
+    const valid = Object.keys(TARGET_CONFIGS).join(", ");
+    for (const t of targets) {
+      if (!TARGET_CONFIGS[t]) {
+        throw new Error(`Unknown install target "${t}". Supported targets: ${valid}`);
+      }
+    }
+
+    const manifest = await readManifest();
+    const lockfile = await readLockfile();
+    if (!manifest.skills[name] && !lockfile.skills[name]) {
+      throw new Error(`Skill "${name}" is not installed.`);
+    }
+
+    const removedPaths = await removeSkillFromTargets(name, ".", targets, options.global);
+
+    const onDiskName = toOnDiskName(name);
+    const targetPathsToRemove = new Set(removedPaths);
+    const globalModes = options.global !== undefined ? [options.global] : [false, true];
+    for (const t of targets) {
+      for (const glob of globalModes) {
+        try {
+          const baseDir = resolveTargetDir(t, glob, ".");
+          targetPathsToRemove.add(join(baseDir, onDiskName));
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (lockfile.skills[name]?.syncedTargets) {
+      lockfile.skills[name].syncedTargets = lockfile.skills[name].syncedTargets.filter(
+        (p) => !targetPathsToRemove.has(p)
+      );
+      await writeLockfile(lockfile);
+    }
+
+    console.log(
+      `${pc.green("✓")} Removed ${pc.bold(name)} from target(s): ${targets.join(", ")}`
+    );
+    return;
+  }
+
   const skillsDir = getSkillsDir();
   const onDiskName = toOnDiskName(name);
 

@@ -7,6 +7,8 @@ import {
   TARGET_CONFIGS,
   syncSkillToTarget,
   resolveTargetDir,
+  normalizeTargets,
+  removeSkillFromTargets,
 } from "../src/lib/targets.js";
 
 describe("install targets", () => {
@@ -183,5 +185,92 @@ describe("install targets", () => {
         projectRoot: tempDir,
       })
     ).rejects.toThrow(/Unknown install target "unknown-ide"/);
+  });
+
+  describe("normalizeTargets", () => {
+    it("handles undefined, empty string, and empty array", () => {
+      expect(normalizeTargets(undefined)).toEqual([]);
+      expect(normalizeTargets("")).toEqual([]);
+      expect(normalizeTargets([])).toEqual([]);
+      expect(normalizeTargets(["  ", ""])).toEqual([]);
+    });
+
+    it("normalizes single and comma-separated targets", () => {
+      expect(normalizeTargets("claude")).toEqual(["claude"]);
+      expect(normalizeTargets("claude,antigravity")).toEqual(["claude", "antigravity"]);
+      expect(normalizeTargets(" claude ,  cursor , antigravity ")).toEqual([
+        "claude",
+        "cursor",
+        "antigravity",
+      ]);
+    });
+
+    it("normalizes array of targets and mixed comma-separated entries", () => {
+      expect(normalizeTargets(["claude", "cursor"])).toEqual(["claude", "cursor"]);
+      expect(normalizeTargets(["claude,cursor", "antigravity"])).toEqual([
+        "claude",
+        "cursor",
+        "antigravity",
+      ]);
+    });
+
+    it("lowercases and deduplicates targets", () => {
+      expect(normalizeTargets("Claude,CLAUDE,antigravity,Antigravity")).toEqual([
+        "claude",
+        "antigravity",
+      ]);
+      expect(normalizeTargets(["Claude", "claude,CURSOR", "cursor"])).toEqual([
+        "claude",
+        "cursor",
+      ]);
+    });
+  });
+
+  describe("removeSkillFromTargets", () => {
+    it("removes skill only from specified targets", async () => {
+      await syncSkillToTarget({
+        skillName: "pdf-summarizer",
+        sourceDir: skillDir,
+        target: "claude",
+        projectRoot: tempDir,
+      });
+      await syncSkillToTarget({
+        skillName: "pdf-summarizer",
+        sourceDir: skillDir,
+        target: "cursor",
+        projectRoot: tempDir,
+      });
+
+      expect(existsSync(join(tempDir, ".claude", "skills", "pdf-summarizer"))).toBe(true);
+      expect(existsSync(join(tempDir, ".cursor", "skills", "pdf-summarizer"))).toBe(true);
+
+      const removed = await removeSkillFromTargets("pdf-summarizer", tempDir, ["claude"]);
+      expect(removed).toHaveLength(1);
+      expect(existsSync(join(tempDir, ".claude", "skills", "pdf-summarizer"))).toBe(false);
+      expect(existsSync(join(tempDir, ".cursor", "skills", "pdf-summarizer"))).toBe(true);
+    });
+
+    it("removes skill from all targets when targets array is omitted", async () => {
+      await syncSkillToTarget({
+        skillName: "pdf-summarizer",
+        sourceDir: skillDir,
+        target: "claude",
+        projectRoot: tempDir,
+      });
+      await syncSkillToTarget({
+        skillName: "pdf-summarizer",
+        sourceDir: skillDir,
+        target: "antigravity",
+        projectRoot: tempDir,
+      });
+
+      expect(existsSync(join(tempDir, ".claude", "skills", "pdf-summarizer"))).toBe(true);
+      expect(existsSync(join(tempDir, ".agents", "skills", "pdf-summarizer"))).toBe(true);
+
+      const removed = await removeSkillFromTargets("pdf-summarizer", tempDir);
+      expect(removed.length).toBeGreaterThanOrEqual(2);
+      expect(existsSync(join(tempDir, ".claude", "skills", "pdf-summarizer"))).toBe(false);
+      expect(existsSync(join(tempDir, ".agents", "skills", "pdf-summarizer"))).toBe(false);
+    });
   });
 });

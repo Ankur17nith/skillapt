@@ -52,20 +52,29 @@ program
     })
   );
 
+function collectTargets(val: string, prev: string[] = []): string[] {
+  return [...prev, ...val.split(",").map((t) => t.trim()).filter(Boolean)];
+}
+
 program
   .command("install [source]")
   .description("Install a skill from the registry or GitHub, or install all from skills.json")
   .option("--frozen", "fail if skills.lock.json is missing or out of sync (for CI)")
-  .option("--target <target>", "sync installed skill to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)")
+  .option(
+    "--target <target>",
+    "sync installed skill to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)",
+    collectTargets,
+    []
+  )
   .option("-g, --global", "install target skills globally to user home directory")
   .option("-y, --yes", "automatically confirm permissions prompts")
   .option("--strict", "fail GitHub installs on content rule violations instead of warning")
   .option("--allow-ext <extensions>", "additional allowed file extensions for GitHub installs (comma-separated)")
   .action(
-    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string; global?: boolean; yes?: boolean; strict?: boolean; allowExt?: string }) => {
+    wrap(async (source?: string, opts?: { frozen?: boolean; target?: string[]; global?: boolean; yes?: boolean; strict?: boolean; allowExt?: string }) => {
       await installCommand(source, {
         frozen: opts?.frozen,
-        target: opts?.target,
+        target: opts?.target && opts.target.length > 0 ? opts.target : undefined,
         global: opts?.global,
         yes: opts?.yes,
         strict: opts?.strict,
@@ -77,7 +86,21 @@ program
 program
   .command("remove <name>")
   .description("Remove an installed skill")
-  .action(wrap(removeCommand));
+  .option(
+    "--target <target>",
+    "remove skill only from specified AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)",
+    collectTargets,
+    []
+  )
+  .option("-g, --global", "remove from global user target directory")
+  .action(
+    wrap(async (name: string, opts?: { target?: string[]; global?: boolean }) => {
+      await removeCommand(name, {
+        target: opts?.target && opts.target.length > 0 ? opts.target : undefined,
+        global: opts?.global,
+      });
+    })
+  );
 
 program
   .command("list")
@@ -126,11 +149,20 @@ program
   .command("update [name]")
   .description("Update installed skills to their latest compatible versions")
   .option("--json", "output in JSON format")
-  .option("--target <target>", "sync updated skills to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)")
+  .option(
+    "--target <target>",
+    "sync updated skills to AI agent directory (claude, cursor, codex, antigravity, antigravity-cli)",
+    collectTargets,
+    []
+  )
   .option("-g, --global", "install target skills globally to user home directory")
   .action(
-    wrap(async (name?: string, opts?: UpdateOptions) => {
-      await updateCommand(name, opts);
+    wrap(async (name?: string, opts?: { json?: boolean; target?: string[]; global?: boolean }) => {
+      await updateCommand(name, {
+        json: opts?.json,
+        target: opts?.target && opts.target.length > 0 ? opts.target : undefined,
+        global: opts?.global,
+      });
     })
   );
 
