@@ -1,38 +1,73 @@
 # Security Policy
 
-## Reporting Security Vulnerabilities
+`skillapt` installs content that AI agents trust (prompts, scripts, configuration), so we treat
+security reports as a priority.
 
-The `skillapt` project takes the security of AI agent skill distribution seriously. If you discover a vulnerability or security issue, please report it privately.
+## Reporting a vulnerability
 
-**Email**: [security@skillapt.dev](mailto:security@skillapt.dev)
+**Please do not open a public issue for security problems.**
 
-Alternatively, you can open a private draft security advisory via [GitHub Security Advisories](https://github.com/Ankur17nith/skillapt/security/advisories/new).
+Report privately through GitHub:
+**[Report a vulnerability](https://github.com/Ankur17nith/skillapt/security/advisories/new)**
+(Security tab → *Advisories* → *Report a vulnerability*).
 
 Please include:
-- A detailed description of the vulnerability.
-- Steps to reproduce or proof-of-concept exploit.
-- The potential impact on users, workspaces, or agent target directories.
 
-### Response Timeline
-- **Initial Response**: Within 48 hours acknowledging receipt of the report.
-- **Triage & Assessment**: Within 5 business days with severity rating and remediation plan.
-- **Fix & Disclosure**: Coordinated public release and advisory once a patch is tested and verified.
+- A description of the issue and its impact (what an attacker gains, who is affected).
+- Steps to reproduce or a proof of concept (a crafted tarball, lockfile or manifest is ideal).
+- The `skillapt` version (`skillapt --version`), Node.js version and operating system.
 
----
+The same process applies to the sibling repositories
+([skillapt-registry](https://github.com/Ankur17nith/skillapt-registry),
+[skillapt-web](https://github.com/Ankur17nith/skillapt-web)); use that repository's *Security* tab.
 
-## Supported Versions
+### What to expect
+
+| Step | Target |
+| :--- | :--- |
+| Acknowledgement | within 3 business days |
+| Triage and severity assessment | within 7 days |
+| Fix or mitigation plan | within 30 days for high/critical issues |
+| Coordinated disclosure | after a fix is released; reporters are credited unless they prefer otherwise |
+
+This is a volunteer-maintained project, so these are targets rather than guarantees.
+
+## Supported versions
+
+Only the latest minor release line receives security fixes.
 
 | Version | Supported |
 | :--- | :--- |
-| `1.0.x` | :white_check_mark: |
-| `0.1.x` | :white_check_mark: |
-| `< 0.1.0` | :x: |
+| `1.0.x` | ✅ |
+| `< 1.0.0` | ❌ |
 
----
+## Scope
 
-## Security Model & Threat Model Summary
+In scope:
 
-- **Integrity**: Skill packages are verified with SHA-256 before extraction. Note that SHA-256 provides integrity against the hash published in the registry/lockfile; it is not a cryptographic author signature.
-- **Path Traversal Protection**: Archive paths are checked to prevent writing outside target directories (resolving paths, checking boundaries, blocking path traversal segments `..`, absolute paths, symlinks).
-- **Execution**: The CLI never executes lifecycle scripts (such as `postinstall`) automatically during installation.
-- **Permission Declarations**: Manifest permissions (`network`, `shell`, `filesystem`) are metadata declarations for user confirmation, not runtime sandbox enforcement. Agent runtimes are responsible for runtime isolation.
+- Path traversal or arbitrary file write/delete via archives, manifests, lockfiles or skill names.
+- Archive handling (symlinks, hardlinks, device files, decompression bombs, size/count limits).
+- Integrity or lockfile bypass (installing content that does not match the recorded hash).
+- Credential handling (token leakage, cross-origin token sending, insecure storage).
+- Command injection, SSRF or unsafe redirects in the CLI.
+
+Out of scope:
+
+- Malicious *content* of a skill you chose to install (prompt injection in `SKILL.md`, a script an agent later runs).
+  `skillapt` shows declared permissions and never runs scripts itself, but it cannot sandbox your agent.
+- Permissions declared in `skill.json`: they are metadata for review, not an enforced sandbox.
+- Vulnerabilities that require an already-compromised machine or an attacker-controlled `SKILLAPT_*` environment.
+- Denial of service from unrealistically large inputs on your own machine.
+
+## Security model summary
+
+- **Integrity**: packages are verified with SHA-256 before extraction. This protects against corruption and
+  registry-side tampering after publication; it is not an author signature.
+- **Safe extraction**: bounded decompression (5 MB compressed, 25 MB uncompressed, 500 files, depth and
+  path-length limits), no links/devices, path boundary assertions, content rules and magic-byte checks.
+- **No script execution**: lifecycle scripts are never run during install.
+- **Untrusted lockfiles and manifests**: `skills.json` and `skills.lock.json` are treated as untrusted input;
+  recorded paths are only acted on inside known agent target directories.
+- **Credentials**: tokens are stored with mode `0600`, bound to the registry origin, never sent over plain HTTP
+  (except `localhost`) or to other origins (including across redirects), and never logged.
+- **Transport**: HTTPS only for registries (HTTP only for localhost), response size limits and request timeouts.
