@@ -373,7 +373,8 @@ export async function validateSkillTree(
         }
         let isExcluded = false;
         for (const excl of excludedDirs) {
-          if (resolvedFullPath === excl || resolvedFullPath.startsWith(excl + "/")) {
+          const rel = relative(excl, resolvedFullPath);
+          if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
             isExcluded = true;
             break;
           }
@@ -528,6 +529,7 @@ export async function validateSkillTarball(
     await tarExtract({
       file: tarballPath,
       cwd: tmpExtract,
+      preserveOwner: false,
       onReadEntry(entry) {
         fileCount++;
         if (fileCount > MAX_FILE_COUNT) {
