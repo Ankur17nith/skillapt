@@ -70,18 +70,17 @@ export async function setStoredToken(token: string, registryUrl?: string): Promi
     registry: activeRegistry,
   };
 
-  // Write file with mode 0600
+  // Tighten permissions on a pre-existing file BEFORE writing the secret into it
+  try {
+    await chmod(filePath, 0o600);
+  } catch {
+    // File does not exist yet (created below with 0600) or chmod unsupported (Windows)
+  }
+
   await writeFile(filePath, JSON.stringify(updated, null, 2) + "\n", {
     encoding: "utf-8",
     mode: 0o600,
   });
-
-  // Explicitly ensure chmod 0600 on existing files as well
-  try {
-    await chmod(filePath, 0o600);
-  } catch {
-    // Windows might ignore chmod, which is fine
-  }
 }
 
 /**
@@ -135,6 +134,24 @@ export async function getAuthToken(targetRegistryUrl?: string): Promise<string |
 }
 
 /**
+ * Build the command used to open a URL. Never routes the URL through a shell:
+ * on Windows `cmd /c start` would interpret `&`, `|` and `^` inside the URL, so
+ * `rundll32 url.dll,FileProtocolHandler` is used instead.
+ */
+export function buildOpenCommand(
+  platform: NodeJS.Platform,
+  url: string
+): { cmd: string; args: string[] } {
+  if (platform === "darwin") {
+    return { cmd: "open", args: [url] };
+  }
+  if (platform === "win32") {
+    return { cmd: "rundll32", args: ["url.dll,FileProtocolHandler", url] };
+  }
+  return { cmd: "xdg-open", args: [url] };
+}
+
+/**
  * Open a URL in the user's default browser (non-blocking, graceful fallback).
  * Validates that URL protocol is HTTPS and uses execFile with an argument array.
  */
@@ -149,19 +166,7 @@ export async function openBrowser(url: string): Promise<boolean> {
   }
 
   return new Promise<boolean>((resolve) => {
-    let cmd: string;
-    let args: string[];
-
-    if (process.platform === "darwin") {
-      cmd = "open";
-      args = [url];
-    } else if (process.platform === "win32") {
-      cmd = process.env.COMSPEC || "cmd.exe";
-      args = ["/c", "start", "", url];
-    } else {
-      cmd = "xdg-open";
-      args = [url];
-    }
+    const { cmd, args } = buildOpenCommand(process.platform, url);
 
     try {
       execFile(cmd, args, (err) => {
