@@ -76,6 +76,29 @@ export async function installSingle(
   }
 }
 
+/**
+ * Refuse to replace an installed skill that was installed from a different source.
+ * The on-disk name can be influenced by untrusted repository content (skill.json
+ * "name"), so a repo must not be able to silently take over another skill's slot.
+ */
+function assertNoSourceConflict(
+  manifest: Awaited<ReturnType<typeof readManifest>>,
+  name: string,
+  parsed: GitHubSource
+): void {
+  const existing = manifest.skills[name];
+  if (!existing) return;
+  const sameSource =
+    existing.source === `${parsed.owner}/${parsed.repo}` &&
+    (existing.subpath ?? undefined) === (parsed.subpath ?? undefined);
+  if (!sameSource) {
+    throw new Error(
+      `Skill "${name}" is already installed from a different source ("${existing.source}"). ` +
+        `Refusing to replace it with ${parsed.owner}/${parsed.repo}. Run 'skillapt remove ${name}' first if you intend to switch sources.`
+    );
+  }
+}
+
 async function installGitHub(
   parsed: GitHubSource,
   options?: {
@@ -98,13 +121,15 @@ async function installGitHub(
   const sha = options?.forceSha ?? await resolveRef(parsed.owner, parsed.repo, parsed.ref);
   const shortSha = sha.slice(0, 7);
 
-  console.log(pc.dim(`Downloading ${shortSha}...`));
-  const tarball = await downloadTarball(parsed.owner, parsed.repo, sha);
-
   // Determine skill name: check skill.json after extraction, fallback to repo/subfolder name
   const defaultName = parsed.subpath
     ? parsed.subpath.split("/").pop()!
     : parsed.repo;
+
+  assertNoSourceConflict(await readManifest(), defaultName, parsed);
+
+  console.log(pc.dim(`Downloading ${shortSha}...`));
+  const tarball = await downloadTarball(parsed.owner, parsed.repo, sha);
 
   console.log(pc.dim(`Extracting...`));
   const installDir = await extractSkill({
@@ -135,6 +160,15 @@ async function installGitHub(
 
   // Check collision with manifest
   let manifest = await readManifest();
+  try {
+    if (name !== defaultName) {
+      assertNoSourceConflict(manifest, name, parsed);
+    }
+  } catch (err) {
+    // Discard the freshly extracted copy; never touch the other skill's directory.
+    await rm(installDir, { recursive: true, force: true });
+    throw err;
+  }
   for (const existingName of Object.keys(manifest.skills)) {
     if (existingName !== name && toOnDiskName(existingName) === toOnDiskName(name)) {
       throw new Error(
