@@ -107,4 +107,25 @@ describe("A-08: Dependency resolver safety (cycles, depth, diamonds)", () => {
     const result = await resolver.resolve("root");
     expect(result.packages.get("shared")?.version).toBe("1.2.5");
   });
+
+  it("caps the total number of resolved packages to stop install bombs", async () => {
+    const deps: Record<string, string> = {};
+    const mockRegistry: Record<string, SkillDetail> = {};
+    // 3 layers of fan-out would be unbounded without a cap; 120 siblings exceeds it directly.
+    for (let i = 0; i < 120; i++) {
+      deps[`leaf-${i}`] = "1.0.0";
+      mockRegistry[`leaf-${i}`] = makeDetail(`leaf-${i}`, { "1.0.0": {} });
+    }
+    mockRegistry["bomb-root"] = makeDetail("bomb-root", { "1.0.0": { dependencies: deps } });
+
+    const client = new RegistryClient();
+    vi.spyOn(client, "getSkill").mockImplementation(async (name) => {
+      const res = mockRegistry[name];
+      if (!res) throw new Error(`Not found: ${name}`);
+      return res;
+    });
+
+    const resolver = new DependencyResolver(client);
+    await expect(resolver.resolve("bomb-root", "1.0.0")).rejects.toThrow(/exceeds the limit/i);
+  });
 });

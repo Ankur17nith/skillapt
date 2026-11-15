@@ -4,6 +4,9 @@ import type { RegistryClient, SkillDetail, SkillVersionSummary } from "./registr
 import { resolveSkillVersion } from "./semver.js";
 import { REGISTRY_NAME_REGEX } from "./source.js";
 
+/** Upper bound on distinct packages in one resolution (guards against install bombs). */
+export const MAX_RESOLVED_PACKAGES = 100;
+
 export interface PackageRequirement {
   from: string;
   range: string;
@@ -84,6 +87,12 @@ export class DependencyResolver {
     if (name.length > 100 || name.includes("--") || !REGISTRY_NAME_REGEX.test(name)) {
       throw new Error(
         `Invalid dependency name "${name}" declared by ${requestedBy}. Installation aborted.`
+      );
+    }
+
+    if (!packages.has(name) && packages.size >= MAX_RESOLVED_PACKAGES) {
+      throw new Error(
+        `Dependency tree exceeds the limit of ${MAX_RESOLVED_PACKAGES} packages. Installation aborted.`
       );
     }
 
