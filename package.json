@@ -2,6 +2,8 @@
   "name": "skillapt",
   "version": "1.0.0",
   "description": "Package manager and CLI for AI agent skills",
+  "author": "Ankur17nith",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "skillapt": "dist/cli.js"
@@ -16,7 +18,8 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "pretest": "npm run build",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "keywords": [
     "skillapt",
@@ -40,9 +43,14 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "dependencies": {
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
