@@ -5,6 +5,7 @@ import { installCommand } from "./commands/install.js";
 import { removeCommand } from "./commands/remove.js";
 import { listCommand, type ListOptions } from "./commands/list.js";
 import { searchCommand, type SearchOptions } from "./commands/search.js";
+import { categoriesCommand, type CategoriesOptions } from "./commands/categories.js";
 import { infoCommand, type InfoOptions } from "./commands/info.js";
 import { outdatedCommand, type OutdatedOptions } from "./commands/outdated.js";
 import { updateCommand, type UpdateOptions } from "./commands/update.js";
@@ -113,15 +114,27 @@ program
   );
 
 program
-  .command("search <query>")
-  .description("Search for skills in the registry")
+  .command("search [query]")
+  .description("Search for skills in the registry (plain text when piped)")
   .option("--json", "output in JSON format")
+  .option("--plain", "plain text output: one skill per block with its install command")
   .option("--category <cat>", "filter by category")
   .option("--compat <runtime>", "filter by compatibility runtime")
   .option("--limit <count>", "number of items to return (default: 20)")
   .action(
-    wrap(async (query: string, opts: SearchOptions) => {
+    wrap(async (query: string | undefined, opts: SearchOptions) => {
       await searchCommand(query, opts);
+    })
+  );
+
+program
+  .command("categories")
+  .description("List skill categories and what each is for")
+  .option("--json", "output in JSON format")
+  .option("--plain", "plain text output")
+  .action(
+    wrap(async (opts: CategoriesOptions) => {
+      await categoriesCommand(opts);
     })
   );
 

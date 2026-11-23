@@ -31,6 +31,9 @@ const searchSchema = z.looseObject({
   skills: z.array(z.looseObject({ name: z.string() })),
   pagination: z.looseObject({}).optional(),
 });
+const categoriesSchema = z.looseObject({
+  categories: z.array(z.looseObject({ id: z.string(), description: z.string() })),
+});
 const userSchema = z.looseObject({ handle: z.string() });
 const publishSchema = z.looseObject({ name: z.string(), version: z.string(), sha256: z.string() });
 
@@ -45,6 +48,13 @@ export type Category =
   | "communication"
   | "productivity"
   | "other";
+
+export interface CategoryInfo {
+  id: string;
+  label: string;
+  description: string;
+  count: number;
+}
 
 export interface Permissions {
   network: boolean;
@@ -86,6 +96,11 @@ export interface SkillSummary {
   compatibility: string[];
   downloads: number;
   verified: boolean;
+  /** "published" (uploaded) or "crawled" (indexed from a public repository). */
+  source?: "published" | "crawled";
+  /** "owned" | "claimed" | "unclaimed" */
+  claimStatus?: string;
+  installCommand?: string;
   owner: {
     handle: string;
     avatarUrl: string;
@@ -122,6 +137,11 @@ export interface SkillDetail {
   };
   latestVersion: string;
   downloads: number;
+  source?: "published" | "crawled";
+  claimStatus?: string;
+  sourceUrl?: string | null;
+  sourcePath?: string | null;
+  sourceSha?: string | null;
   versions: Record<string, SkillVersionSummary>;
   readme?: string;
   createdAt: string;
@@ -177,7 +197,7 @@ export interface SearchSkillsOptions {
   category?: Category | string;
   compat?: string;
   verified?: boolean;
-  sort?: "downloads" | "recent" | "name";
+  sort?: "relevance" | "downloads" | "updated" | "recent" | "name";
   page?: number;
   limit?: number;
 }
@@ -322,6 +342,18 @@ export class RegistryClient {
     const qs = params.toString();
     const endpoint = `/skills${qs ? `?${qs}` : ""}`;
     return this.request<SearchSkillsResponse>(endpoint, { method: "GET", anonymous: true }, searchSchema);
+  }
+
+  /**
+   * List skill categories with a description of what each is for (anonymous).
+   */
+  async getCategories(): Promise<CategoryInfo[]> {
+    const data = await this.request<{ categories: CategoryInfo[] }>(
+      "/categories",
+      { method: "GET", anonymous: true },
+      categoriesSchema
+    );
+    return data.categories;
   }
 
   /**

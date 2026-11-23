@@ -128,7 +128,9 @@ export const SkillManifestSchema = z.object({
   }).max(255).optional(),
   keywords: z.array(z.string().regex(/^[a-z0-9-]{2,30}$/, "Keywords must be 2-30 lowercase alphanumeric/hyphen")).max(10).optional(),
   category: z.enum([
-    "documents", "coding", "research", "data", "devtools", "communication", "productivity", "other"
+    "documents", "coding", "testing", "devtools", "devops", "database", "data", "research",
+    "writing", "design", "security", "automation", "ai-agents", "communication", "productivity",
+    "marketing", "finance", "education", "media", "other"
   ] as const),
   compatibility: z.array(z.string().min(1)).min(1, "At least one compatibility target required").max(20),
   dependencies: z.record(z.string(), z.string()).optional().refine((deps) => {
