@@ -207,6 +207,39 @@ async function installGitHub(
   await syncTargets([name], options);
 }
 
+/**
+ * Crawled listings have no uploaded tarball: they point at a public GitHub
+ * repository, pinned to the commit the registry indexed. Returns the GitHub
+ * source to install from, or null for ordinary published skills.
+ */
+export function crawledSourceFor(detail: {
+  source?: string;
+  sourceUrl?: string | null;
+  sourcePath?: string | null;
+  sourceSha?: string | null;
+  versions?: Record<string, unknown>;
+}): GitHubSource | null {
+  if (detail.source !== "crawled" || !detail.sourceUrl) return null;
+  if (detail.versions && Object.keys(detail.versions).length > 0) return null;
+  let url: URL;
+  try {
+    url = new URL(detail.sourceUrl);
+  } catch {
+    return null;
+  }
+  const [owner, repo] = url.pathname.replace(/^\/|\/$/g, "").split("/");
+  if (url.hostname !== "github.com" || !owner || !repo) return null;
+  const subpath = detail.sourcePath ? detail.sourcePath.replace(/^\/|\/$/g, "") : null;
+  return {
+    type: "github",
+    raw: detail.sourceUrl,
+    owner,
+    repo,
+    ref: detail.sourceSha ?? null,
+    subpath: subpath || null,
+  };
+}
+
 async function installRegistry(
   parsed: RegistrySource,
   options?: {
@@ -229,6 +262,19 @@ async function installRegistry(
   }
 
   const client = new RegistryClient();
+
+  const crawled = crawledSourceFor(await client.getSkill(parsed.name));
+  if (crawled) {
+    console.log(
+      pc.yellow(
+        `${parsed.name} is an unclaimed listing indexed from ${crawled.owner}/${crawled.repo}; installing from that repository` +
+          (crawled.ref ? ` at commit ${crawled.ref.slice(0, 7)}.` : ".")
+      )
+    );
+    await installGitHub(crawled, { ...options, forceSha: crawled.ref ?? undefined });
+    return;
+  }
+
   const resolver = new DependencyResolver(client);
 
   const rangeOrVersion = options?.forceVersion ?? parsed.range;

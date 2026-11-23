@@ -62,3 +62,25 @@ describe("agent-friendly search and categories", () => {
     expect(printed()).toContain("skillapt search --category <id>");
   });
 });
+
+import { crawledSourceFor } from "../src/commands/install.js";
+
+describe("installing crawled listings", () => {
+  it("maps a crawled listing to a pinned GitHub source", () => {
+    expect(
+      crawledSourceFor({
+        source: "crawled",
+        sourceUrl: "https://github.com/alice/skills",
+        sourcePath: "tools/pdf",
+        sourceSha: "a".repeat(40),
+        versions: {},
+      })
+    ).toMatchObject({ type: "github", owner: "alice", repo: "skills", subpath: "tools/pdf", ref: "a".repeat(40) });
+  });
+
+  it("leaves published skills and non-GitHub sources alone", () => {
+    expect(crawledSourceFor({ source: "published", versions: { "1.0.0": {} } })).toBeNull();
+    expect(crawledSourceFor({ source: "crawled", sourceUrl: "https://example.com/x/y", versions: {} })).toBeNull();
+    expect(crawledSourceFor({ source: "crawled", sourceUrl: "https://github.com/a/b", versions: { "1.0.0": {} } })).toBeNull();
+  });
+});

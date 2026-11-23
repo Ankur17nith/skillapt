@@ -29,7 +29,12 @@ export async function infoCommand(
   if (skill.repository) {
     console.log(`${pc.bold("Repository:")}    ${skill.repository}`);
   }
-  if (skill.owner?.handle) {
+  if (skill.claimStatus === "unclaimed") {
+    console.log(
+      `${pc.bold("Ownership:")}     ${pc.yellow("unclaimed")} ${pc.dim("(indexed from a public repository; the owner has not claimed it)")}`
+    );
+    if (skill.sourceUrl) console.log(`${pc.bold("Source:")}        ${skill.sourceUrl}`);
+  } else if (skill.owner?.handle) {
     console.log(`${pc.bold("Publisher:")}     ${skill.owner.handle}`);
   }
   console.log(`${pc.bold("Downloads:")}     ${skill.downloads ?? 0}`);
