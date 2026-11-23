@@ -6,6 +6,7 @@ import { removeCommand } from "./commands/remove.js";
 import { listCommand, type ListOptions } from "./commands/list.js";
 import { searchCommand, type SearchOptions } from "./commands/search.js";
 import { categoriesCommand, type CategoriesOptions } from "./commands/categories.js";
+import { mcpCommand } from "./commands/mcp.js";
 import { infoCommand, type InfoOptions } from "./commands/info.js";
 import { outdatedCommand, type OutdatedOptions } from "./commands/outdated.js";
 import { updateCommand, type UpdateOptions } from "./commands/update.js";
@@ -124,6 +125,15 @@ program
   .action(
     wrap(async (query: string | undefined, opts: SearchOptions) => {
       await searchCommand(query, opts);
+    })
+  );
+
+program
+  .command("mcp")
+  .description("Run a read-only MCP server (stdio) so agents can search skills")
+  .action(
+    wrap(async () => {
+      await mcpCommand();
     })
   );
 
