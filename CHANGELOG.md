@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `skillapt search` prints plain text (one install line per skill) when piped, accepts `--category`, and works without a query when a category is given; new `skillapt categories` and read-only `skillapt mcp` (stdio MCP server) commands.
+- Installing an unclaimed, crawled registry listing installs from its GitHub source pinned to the indexed commit; `info` shows ownership.
+
 ### Changed
 - Minimum supported Node.js is now 22.12.0 (Node 20 is end-of-life and `commander` 15, `vitest` 5 and `tsup` 9 require it). CI now runs on Node 22 and 24.
 
